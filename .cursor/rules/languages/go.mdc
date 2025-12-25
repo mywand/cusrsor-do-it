@@ -1,0 +1,199 @@
+---
+description: Go 项目编码规范
+globs: ["**/*.go", "**/go.mod", "**/go.sum"]
+alwaysApply: false
+---
+最近更新: 2025-10-10
+# Go 编码与工程规约
+
+## 1. 运行时与版本
+- 统一使用 Go 1.21+ （如需降级说明原因）。
+- 使用 `go.mod` 管理依赖，设置合理的 `go` 版本。
+
+## 2. 项目结构
+```
+project/
+ cmd/
+   app/
+     main.go (应用入口)
+ internal/
+   domain/
+   service/
+   repository/
+   handler/
+   config/
+ pkg/ (可复用包)
+ api/ (API 定义，如 protobuf)
+ web/ (静态资源)
+ scripts/
+ docs/
+ go.mod
+ go.sum
+```
+- `internal/` 包含私有代码，外部无法导入。
+- `pkg/` 包含可被外部项目导入的公共库。
+- `cmd/` 包含应用程序入口点。
+
+## 3. 依赖管理
+- 使用 `go mod tidy` 保持依赖清洁。
+- 优先使用标准库，选择社区主流库（gin、gorm、logrus/zap）。
+- 引入第三方库需评估：维护状态、性能、安全性。
+- 使用 `go mod vendor` 固化依赖（可选）。
+
+## 4. 命名规范
+- PascalCase：公共类型、函数、方法、常量。
+- camelCase：私有变量、函数、方法。
+- 包名：小写，简短，有意义（避免 `util`、`common`）。
+- 接口名：通常以 `-er` 结尾（`Reader`、`Writer`）。
+- 错误变量：以 `Err` 开头（`ErrNotFound`）。
+
+## 5. 注释与文档
+- 公共 API 必须有注释，以类型/函数名开头。
+```go
+// UserService 提供用户相关业务逻辑
+type UserService struct {}
+
+// CreateUser 创建新用户，返回用户ID
+func (s *UserService) CreateUser(ctx context.Context, req *CreateUserRequest) (*User, error) {}
+```
+- 包级别注释在 `doc.go` 或主文件顶部。
+- 复杂算法需要详细注释说明思路。
+
+## 6. 错误处理
+- 使用标准错误处理：`if err != nil { return err }`。
+- 自定义错误类型实现 `error` 接口。
+- 使用 `fmt.Errorf` 包装错误：`fmt.Errorf("failed to create user: %w", err)`。
+- 错误信息：小写开头，不以标点结尾，包含上下文。
+- 考虑使用 `github.com/pkg/errors` 或 Go 1.13+ 的错误包装。
+
+## 7. 日志
+- 使用结构化日志（zap、logrus）。
+- 日志级别：DEBUG、INFO、WARN、ERROR。
+- 包含上下文信息：`logger.WithFields(logrus.Fields{"user_id": userID, "action": "create"})`。
+- 避免在循环中打印大量日志。
+
+## 8. 并发与 Goroutine
+- 使用 `context.Context` 传递取消信号和超时。
+- Goroutine 泄漏检查：确保所有 goroutine 能正常退出。
+- 使用 channel 进行 goroutine 间通信，避免共享内存。
+- 使用 `sync.WaitGroup` 等待 goroutine 完成。
+- 使用 `sync.Once` 确保初始化只执行一次。
+
+## 9. 性能
+- 使用 `go test -bench` 进行基准测试。
+- 避免不必要的内存分配，复用对象（sync.Pool）。
+- 字符串拼接使用 `strings.Builder` 或 `fmt.Sprintf`。
+- 切片预分配容量：`make([]int, 0, expectedSize)`。
+- 使用 `pprof` 进行性能分析。
+
+## 10. 数据访问
+- 数据库连接池配置合理的最大连接数。
+- 使用参数化查询防止 SQL 注入。
+- 事务处理：确保 commit/rollback。
+- 考虑使用 ORM（GORM）或查询构建器（Squirrel）。
+
+## 11. 配置管理
+- 使用环境变量或配置文件（YAML、JSON）。
+- 配置结构体使用 tag：`json:"database_url" env:"DATABASE_URL"`。
+- 敏感配置通过环境变量传递，不提交到版本控制。
+- 使用 `github.com/spf13/viper` 等配置管理库。
+
+## 12. HTTP 服务
+- 使用标准库 `net/http` 或框架（Gin、Echo、Fiber）。
+- 中间件：日志、认证、CORS、限流。
+- 优雅关闭：监听系统信号，完成当前请求后关闭。
+- 健康检查端点：`/health`、`/ready`。
+
+## 13. JSON 处理
+- 使用 struct tag：`json:"user_name,omitempty"`。
+- 时间格式统一使用 RFC3339：`time.RFC3339`。
+- 避免使用 `interface{}` 处理 JSON，定义明确的结构体。
+
+## 14. 测试
+- 测试文件以 `_test.go` 结尾。
+- 表格驱动测试：
+```go
+func TestAdd(t *testing.T) {
+    tests := []struct {
+        name string
+        a, b int
+        want int
+    }{
+        {"positive", 1, 2, 3},
+        {"negative", -1, -2, -3},
+    }
+    for _, tt := range tests {
+        t.Run(tt.name, func(t *testing.T) {
+            if got := Add(tt.a, tt.b); got != tt.want {
+                t.Errorf("Add() = %v, want %v", got, tt.want)
+            }
+        })
+    }
+}
+```
+- 使用 `testify` 库简化断言。
+- Mock 使用 `gomock` 或手写接口实现。
+
+## 15. 安全
+- 输入验证：使用 `github.com/go-playground/validator`。
+- 避免 SQL 注入：使用参数化查询。
+- 密码存储：使用 bcrypt 哈希。
+- JWT 令牌：设置合理过期时间，使用强密钥。
+- HTTPS：生产环境强制使用。
+
+## 16. API 设计
+- RESTful API 设计原则。
+- 统一响应格式：
+```go
+type Response struct {
+    Code    int         `json:"code"`
+    Message string      `json:"message"`
+    Data    interface{} `json:"data,omitempty"`
+}
+```
+- 使用 HTTP 状态码表示操作结果。
+- API 版本控制：URL 路径或 Header。
+
+## 17. 构建与部署
+- 使用 `go build` 构建二进制文件。
+- 多阶段 Docker 构建减小镜像大小：
+```dockerfile
+FROM golang:1.21-alpine AS builder
+WORKDIR /app
+COPY . .
+RUN go build -o main .
+
+FROM alpine:latest
+RUN apk --no-cache add ca-certificates
+COPY --from=builder /app/main .
+CMD ["./main"]
+```
+- 使用 `go mod download` 缓存依赖。
+
+## 18. 代码质量
+- 使用 `gofmt` 格式化代码。
+- 使用 `golint`、`go vet`、`golangci-lint` 静态分析。
+- 代码覆盖率：`go test -cover`。
+- 使用 `goimports` 自动管理导入。
+
+## 19. 监控与可观测性
+- 使用 Prometheus 指标：请求数、延迟、错误率。
+- 分布式追踪：OpenTelemetry。
+- 健康检查：数据库连接、外部服务状态。
+- 结构化日志便于查询和分析。
+
+## 20. 版本控制
+- 遵循语义化版本（SemVer）。
+- 使用 Git tag 标记版本。
+- Conventional Commits 规范提交信息。
+
+## 21. 自查清单
+- 是否正确处理了所有错误？
+- Goroutine 是否会泄漏？
+- 是否使用了 context 传递取消信号？
+- 数据库连接是否正确关闭？
+- 是否有竞态条件？
+- 日志是否包含足够的上下文信息？
+- API 响应格式是否一致？
+
+(参照 `coding-standards.mdc` / `quality.mdc` / `workflow.mdc` 获取通用流程与质量要求。)

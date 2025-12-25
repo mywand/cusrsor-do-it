@@ -1,0 +1,992 @@
+---
+description: Java coding and engineering guidelines (Java 编码与工程规约)
+globs: ["**/*.java"]
+alwaysApply: false
+---
+最近更新: 2025-10-17
+最近审阅: 2025-10-17
+# Java 编码与工程规约（增强版）
+
+> **核心目标**：提升代码一致性、可维护性、可观测性与交付质量
+> 
+> **技术基线**：覆盖现代 Java (17/21 LTS) 特性，提供"可执行 / 可验证"规则
+> 
+> **文件编码**：所有源代码文件统一使用 UTF-8 编码，无 BOM
+> 
+> **适用范围**：本规约与 `coding-standards.mdc` / `quality.mdc` / `security.mdc` 协同使用；冲突时以本文件中"专用 Java 细则"优先
+
+## 目录
+1. 语言与版本策略  
+2. 项目结构  
+3. 依赖与制品管理  
+4. 命名与基本编码  
+5. 语言特性与风格  
+6. 面向对象与设计  
+7. 异常与错误码  
+8. 日志与可观测性  
+9. 并发与线程模型  
+10. 性能与资源优化  
+11. 测试策略  
+12. 安全与合规  
+13. 序列化与 JSON  
+14. 构建与质量守护  
+15. 配置与环境管理  
+16. 数据访问与持久化  
+17. API 设计与契约  
+18. 版本控制与分支  
+19. 代码质量度量  
+20. 事务管理  
+21. 工具类与通用组件  
+22. 缓存策略  
+23. 部署与运行  
+24. 扩展与演进建议  
+
+（章节已重新编号，去除重复与缺失；测试/性能/安全/配置的重复内容已合并。）
+
+## 使用指南
+
+### 快速导航
+- **[核心规范](#1-语言与版本策略)** - 语言特性、版本策略、基础编码
+- **[项目结构](#2-项目结构)** - 包结构、分层架构、目录组织
+- **[依赖管理](#3-依赖与制品管理)** - 版本控制、依赖评估、安全扫描
+- **[编码规范](#4-命名与基本编码)** - 命名规约、注释规范、代码风格
+- **[Lombok 使用](#5-语言特性与风格)** - Lombok 注解、最佳实践
+- **[设计原则](#6-面向对象与设计)** - SOLID、设计模式、架构原则
+- **[异常处理](#7-异常与错误码)** - 异常设计、错误码、统一处理
+- **[日志监控](#8-日志与可观测性)** - 日志规范、指标监控、链路追踪
+- **[并发编程](#9-并发与线程模型)** - 线程池、并发控制、线程安全
+- **[性能优化](#10-性能与资源优化)** - 性能调优、资源管理、监控
+- **[测试策略](#11-测试策略)** - 单元测试、集成测试、测试覆盖
+- **[安全合规](#12-安全与合规)** - 输入校验、SQL 注入、权限控制
+- **[序列化](#13-序列化与-json)** - JSON 处理、序列化规范
+- **[构建质量](#14-构建与质量守护)** - 构建工具、静态分析、质量门禁
+- **[配置管理](#15-配置与环境管理)** - 环境配置、配置类、敏感信息
+- **[数据访问](#16-数据访问与持久化)** - ORM 使用、数据库操作、事务管理
+- **[API 设计](#17-api-设计与契约)** - REST 设计、响应格式、版本管理
+- **[版本控制](#18-版本控制与分支)** - Git 规范、分支策略、提交规范
+- **[代码质量](#19-代码质量度量)** - 复杂度控制、代码审查、质量度量
+- **[事务管理](#20-事务管理)** - 声明式事务、编程式事务
+- **[工具组件](#21-工具类与通用组件)** - 工具类设计、通用组件
+- **[缓存策略](#22-缓存策略)** - 缓存使用、一致性、性能优化
+- **[部署运维](#23-部署与运行)** - 环境配置、健康检查、运行时保护
+- **[扩展演进](#24-扩展与演进建议)** - 架构演进、新技术引入
+
+### 按场景使用
+- **新项目启动**：重点阅读 [1-5章](#1-语言与版本策略)（语言特性、项目结构、编码规范）
+- **API 开发**：重点阅读 [17-18章](#17-api-设计与契约)（API 设计、版本控制）
+- **数据层开发**：重点阅读 [16、20章](#16-数据访问与持久化)（数据访问、事务管理）
+- **测试编写**：重点阅读 [11章](#11-测试策略)（测试策略、测试规范）
+- **性能优化**：重点阅读 [10、22章](#10-性能与资源优化)（性能优化、缓存策略）
+- **安全加固**：重点阅读 [12章](#12-安全与合规)（安全规范、合规要求）
+- **日志监控**：重点阅读 [8章](#8-日志与可观测性)（日志规范、监控指标）
+- **部署运维**：重点阅读 [23章](#23-部署与运行)（部署规范、运行时保护）
+
+### 快速查找
+- **Lombok 使用**：查看 [5.1节](#51-lombok-使用规范)
+- **异常处理**：查看 [7章](#7-异常与错误码)
+- **日志规范**：查看 [8章](#8-日志与可观测性)
+- **API 设计**：查看 [17章](#17-api-设计与契约)
+- **数据访问**：查看 [16章](#16-数据访问与持久化)
+- **测试规范**：查看 [11章](#11-测试策略)
+- **安全要求**：查看 [12章](#12-安全与合规)
+- **性能优化**：查看 [10、22章](#10-性能与资源优化)
+
+### 最佳实践
+- **开发前**：先阅读 [1-5章](#1-语言与版本策略) 了解基础规范
+- **编码时**：参考 [4-6章](#4-命名与基本编码) 的编码规范和设计原则
+- **测试时**：遵循 [11章](#11-测试策略) 的测试策略
+- **部署前**：检查 [12、23章](#12-安全与合规) 的安全和部署要求
+- **维护时**：参考 [19章](#19-代码质量度量) 的质量度量标准
+
+---
+
+## 1. 语言与版本策略
+- 基线版本：优先 Java 17 LTS；如运行时/平台允许，逐步评估 Java 21（虚拟线程、模式匹配）。
+- 降级（≤11）必须在架构决策记录（ADR）中说明成本、兼容性和退出计划。
+- 新特性引入需记录：场景 / 好处 / 回退方案（Record、Pattern Matching、Virtual Threads）。
+- 非必要不启用 JPMS；模块化通过多模块 Maven/Gradle 管理即可。
+- 编译参数统一：`-Xlint:all -Werror`（个别抑制需注释原因）。
+- 使用 `--release` 保持源/目标一致；禁止手动 `-source` / `-target` 不匹配。
+
+### 1.1 语言特性使用指引
+| 特性 | 应用场景 | 禁忌/反例 | 备注 |
+|------|----------|-----------|------|
+| var | 局部、语义显而易见 | 难辨类型：`var x = service.process();` | 保持可读性 |
+| record | 纯值对象、不可变 DTO | 需要可变字段或复杂行为 | 自动生成 equals/hashCode |
+| sealed | 有限策略/状态机 | 任意类链路 | 控制扩展范围 |
+| switch 表达式 | 有限枚举映射 | 大量副作用语句 | 表达式化简洁 |
+| Optional | 返回端表示“可能无” | 领域模型字段/集合元素 | 不序列化 Optional |
+| Stream | 批量转换、聚合 | 深度嵌套 >3 链、复杂 side effect | 过长链拆解 |
+| Virtual Thread | I/O 密集高并发 | CPU 密集 / 有限阻塞场景 | 需压测验证 |
+
+## 2. 项目结构
+
+### 2.1 标准包结构
+```
+com.company.project/
+├── Application.java                    # 启动类
+├── config/                           # 配置类
+├── controller/                       # 控制器层
+├── service/                          # 服务层
+├── mapper/                           # 数据访问层
+├── model/                            # 数据模型
+│   ├── entity/                       # 实体类
+│   ├── dto/                          # 数据传输对象
+│   ├── request/                      # 请求对象
+│   └── response/                     # 响应对象
+├── common/                           # 公共组件
+├── util/                             # 工具类
+├── exception/                        # 异常处理
+└── constant/                         # 常量定义
+```
+
+### 2.2 分层架构
+- **Controller层**: 处理HTTP请求，参数校验，调用Service
+- **Service层**: 业务逻辑处理，事务管理
+- **Mapper层**: 数据访问，ORM操作
+- **Model层**: 数据模型定义（Entity、DTO、Request、Response）
+
+### 2.3 项目结构（示例 Maven）
+```
+project
+ ├─ pom.xml (或 build.gradle)
+ ├─ README.md
+ ├─ docs/
+ ├─ modules/
+ │   ├─ core
+ │   │   └─ src/main/java
+ │   ├─ api
+ │   ├─ infra
+ │   └─ app (启动模块)
+ ├─ src
+ │   ├─ main/java
+ │   ├─ main/resources
+ │   └─ test/java
+```
+- 按领域划分 package：`order.payment`, `user.profile`，避免 `util` 泛化聚集。
+- 禁止深层级 (>6) 包结构。
+
+## 3. 依赖与制品管理
+- 版本集中：使用 BOM + `dependencyManagement`；子模块不重复写版本。
+- 新增依赖评估：目的 / 体量 / 活跃度 / CVE 风险 / 替代方案 / 退出成本。
+- 避免功能重叠：如 Guava 与 Commons Lang 功能重复择一。
+- **推荐工具库**（按优先级）：
+  1. **Apache Commons 系列**（`org.apache.commons`）：优先使用，如 Commons Lang、Commons Collections、Commons IO 等
+  2. **Hutool**（`cn.hutool:hutool-all`）：作为补充工具库，提供 Commons 未覆盖的功能
+- 传递性依赖锁定：`mvn -q dependency:tree` + OWASP / Snyk 漏洞扫描；高危 CVE 阻断构建。
+- 禁止生产使用 SNAPSHOT；内部发布遵循 SemVer；变更日志自动化生成。
+- 仓库来源白名单，防止供应链投毒；定期审计。
+
+## 4. 命名与基本编码
+
+### 4.0 文件编码规范
+- **源代码文件**：统一使用 UTF-8 编码，无 BOM
+- **配置文件**：application.yml、application.properties 使用 UTF-8 编码
+- **资源文件**：所有 .properties、.xml、.json 文件使用 UTF-8 编码
+- **IDE 设置**：IDEA/Eclipse 项目编码设置为 UTF-8
+- **Maven/Gradle**：构建工具配置文件编码为 UTF-8
+  ```xml
+  <!-- Maven pom.xml -->
+  <properties>
+      <project.build.sourceEncoding>UTF-8</project.build.sourceEncoding>
+      <project.reporting.outputEncoding>UTF-8</project.reporting.outputEncoding>
+  </properties>
+  ```
+
+### 4.1 命名规约
+
+#### 类命名
+- **Controller**: `XxxController`
+- **Service**: `XxxService` / `XxxServiceImpl`
+- **Entity**: `XxxEntity`
+- **DTO**: `XxxDTO`
+- **Request**: `XxxRequest`
+- **Response**: `XxxResponse`
+- **Enum**: `XxxEnum`
+- **Exception**: `XxxException`
+- 类：业务语义 + 后缀（Service / Controller / Repository / Mapper / Handler）
+
+#### 方法命名
+- **查询**: `getXxx()`, `findXxx()`, `searchXxx()`
+- **保存**: `saveXxx()`, `insertXxx()`
+- **更新**: `updateXxx()`, `modifyXxx()`
+- **删除**: `deleteXxx()`, `removeXxx()`
+- **业务操作**: `processXxx()`, `handleXxx()`
+
+#### 变量命名
+- **常量**: `UPPER_CASE_WITH_UNDERSCORES`
+- **变量**: `camelCase`
+- **布尔值**: `isXxx`, `hasXxx`, `canXxx`
+- Lambda 简短变量：`e`, `it` 仅限极短上下文，其他需语义化
+
+### 4.2 注释规约
+
+#### 类注释
+```java
+/**
+ * 用户服务实现类
+ * 
+ * @author 作者名
+ * @since 1.0
+ */
+```
+
+#### 方法注释
+```java
+/**
+ * 保存用户信息
+ * 
+ * @param request 用户请求参数
+ * @return 操作结果信息
+ * @throws BizException 业务异常
+ */
+```
+
+#### 字段注释
+```java
+/**
+ * 主键ID
+ */
+@TableId(value = "id", type = IdType.AUTO)
+private Long id;
+```
+
+#### 通用注释规范
+- 使用标准 Javadoc：第一句概要 + 关键说明；杜绝“翻译式”空洞注释。
+- 复杂方法需描述：输入 / 输出 / 不变式 / 副作用 / 异常 / 性能敏感点。
+- 注释写“为什么”，代码写“做什么”。
+- 对正则、缓存策略、并发控制、复杂数学公式必须添加意图说明。
+- 标记注释：`// TODO(2025-09-20 @owner) 描述 #issue`。
+
+### 4.3 基本风格补充
+- 禁止 `*` 通配导入；排序：标准库 > 第三方 > 项目内部；静态导入置后。
+- 行长 ≤ 120；链式调用换行缩进对齐点或参数首列。
+- 使用 `final` 表达不可变；对集合返回只读包装或复制。
+- 返回集合/数组不为 null：使用 `Collections.emptyList()` 等。
+- JSON 反序列化后立即校验（Bean Validation + 业务约束）。
+- 禁止在构造函数内进行远程调用 / 启动线程。
+
+## 5. 语言特性与风格（扩展）
+- Null 处理：公共入口使用显式校验；工具方法 `Objects.requireNonNull`。
+- Optional：只用于返回；不要放入字段、集合、序列化结构。
+- 枚举包含：code / 描述 / 安全 `fromCode()`；失败返回 `Optional` 或抛业务异常。
+- **优先使用 Lombok**：`@Getter @Setter @RequiredArgsConstructor @Slf4j @Builder @NoArgsConstructor @AllArgsConstructor`；禁止在 JPA/MyBatis 实体上使用 `@Data`。
+- Record：不可变值对象；不承载复杂行为。
+- Stream：不超过 3 级复杂操作；中间结果需具名拆解。
+- try-with-resources：所有 Closeable 资源必须使用；禁止遗失关闭。
+
+### 5.1 Lombok 使用规范
+
+#### 5.1.1 基本原则
+- **优先使用 Lombok** 减少样板代码，提高开发效率和代码可读性
+- **合理使用**：避免过度依赖，保持代码清晰度
+- **团队统一**：确保团队成员都安装 Lombok 插件并理解其工作原理
+
+#### 5.1.2 推荐注解及使用场景
+
+| 注解 | 用途 | 适用场景 | 备注 |
+|------|------|----------|------|
+| `@Getter` / `@Setter` | 生成 getter/setter 方法 | DTO、VO、Entity | 可单独使用或组合使用 |
+| `@Builder` | 生成建造者模式 | DTO、Request、Response | 支持链式调用，提高可读性 |
+| `@NoArgsConstructor` | 生成无参构造函数 | Entity、DTO | JPA/MyBatis 实体必需 |
+| `@AllArgsConstructor` | 生成全参构造函数 | DTO、VO | 配合 @Builder 使用 |
+| `@RequiredArgsConstructor` | 生成 final 字段构造函数 | Service、Controller | 依赖注入推荐方式 |
+| `@Slf4j` | 生成日志记录器 | 所有需要日志的类 | 替代手动创建 Logger |
+| `@Value` | 生成不可变对象 | 值对象、配置类 | 所有字段 final + getter |
+| `@UtilityClass` | 生成工具类 | 工具类 | 自动 final + 私有构造 |
+| `@Data` | 生成全套方法 | ❌ 不推荐 | 会生成 equals/hashCode |
+
+#### 5.1.3 使用场景最佳实践
+
+**DTO/VO 类**：
+```java
+@Getter
+@Setter
+@Builder
+@NoArgsConstructor
+@AllArgsConstructor
+public class UserDTO {
+    private Long id;
+    private String name;
+    private String email;
+    private LocalDateTime createdAt;
+}
+```
+
+**JPA/MyBatis 实体类**：
+```java
+@Getter
+@Setter
+@NoArgsConstructor
+@AllArgsConstructor
+@Entity
+@Table(name = "user")
+public class UserEntity {
+    @Id
+    @GeneratedValue(strategy = GenerationType.IDENTITY)
+    private Long id;
+    
+    @Column(name = "user_name")
+    private String userName;
+    
+    // ❌ 避免使用 @Data，会影响 JPA 性能
+}
+```
+
+**Service 类**：
+```java
+@Slf4j
+@Service
+@RequiredArgsConstructor  // 替代 @Autowired
+public class UserService {
+    private final UserRepository userRepository;
+    private final UserMapper userMapper;
+    
+    public UserDTO createUser(UserCreateRequest request) {
+        log.info("创建用户: {}", request.getName());
+        
+        UserEntity entity = new UserEntity();
+        entity.setUserName(request.getName());
+        entity.setEmail(request.getEmail());
+        
+        userRepository.save(entity);
+        log.info("用户创建成功, id: {}", entity.getId());
+        
+        return UserDTO.builder()
+            .id(entity.getId())
+            .name(entity.getUserName())
+            .email(entity.getEmail())
+            .build();
+    }
+}
+```
+
+**Controller 类**：
+```java
+@Slf4j
+@RestController
+@RequestMapping("/api/users")
+@RequiredArgsConstructor
+public class UserController {
+    private final UserService userService;
+    
+    @PostMapping
+    public Result<UserDTO> createUser(@RequestBody @Valid UserCreateRequest request) {
+        log.info("接收到创建用户请求: {}", request.getName());
+        UserDTO user = userService.createUser(request);
+        return Result.success(user);
+    }
+}
+```
+
+**工具类**：
+```java
+@UtilityClass  // 自动生成 final 类和私有构造函数
+@Slf4j
+public class DateUtils {
+    
+    /**
+     * 格式化日期
+     */
+    public static String format(LocalDateTime dateTime, String pattern) {
+        if (dateTime == null) {
+            return null;
+        }
+        DateTimeFormatter formatter = DateTimeFormatter.ofPattern(pattern);
+        return dateTime.format(formatter);
+    }
+}
+```
+
+**不可变值对象**：
+```java
+@Value  // 所有字段 final + getter + equals/hashCode
+public class Money {
+    BigDecimal amount;
+    String currency;
+    
+    /**
+     * 加法运算（返回新对象）
+     */
+    public Money add(Money other) {
+        if (!this.currency.equals(other.currency)) {
+            throw new IllegalArgumentException("货币类型不匹配");
+        }
+        return new Money(this.amount.add(other.amount), this.currency);
+    }
+}
+```
+
+#### 5.1.4 禁止使用场景
+- ❌ **禁止在 JPA/MyBatis 实体上使用 `@Data`**：会生成 equals/hashCode，影响性能和延迟加载
+- ❌ **禁止在需要自定义 equals/hashCode 的类上使用 `@Data`**：业务逻辑可能需要特定实现
+- ❌ **禁止过度使用**：如果类只有 1-2 个字段，手写更清晰
+
+#### 5.1.5 注意事项
+- **IDE 插件**：确保 IDEA/Eclipse 安装 Lombok 插件
+- **构建配置**：Maven/Gradle 正确配置 Lombok 依赖
+- **版本管理**：定期更新 Lombok 版本，获取最新特性和bug修复
+- **代码审查**：确保团队成员理解 Lombok 生成的代码逻辑
+
+## 6. 面向对象与设计
+- 遵循 SOLID；倾向组合 > 继承；避免“上帝类”。
+- DTO/Request/Response 仅作传输，不放业务逻辑；Domain/Entity 负责不变式。
+- Factory / Strategy / Template / Builder 适度使用，避免“为模式而模式”。
+- Domain Model 与 Persistence Model 分离：禁止直接暴露 JPA/MyBatis 实体给 API 层。
+- 跨模块依赖通过接口 + 事件解耦，避免循环依赖。
+
+## 7. 异常与错误码
+
+### 7.1 自定义异常
+```java
+public class BizException extends RuntimeException {
+    private Integer code;
+    
+    public BizException(String message) {
+        super(message);
+        this.code = 500;
+    }
+    
+    public BizException(String message, Integer code) {
+        super(message);
+        this.code = code;
+    }
+    
+    public Integer getCode() {
+        return code;
+    }
+}
+```
+
+### 7.2 异常处理模式
+```java
+try {
+    // 业务逻辑
+} catch (BizException e) {
+    log.error("业务异常: {}", e.getMessage());
+    return Result.fail(e.getMessage());
+} catch (Exception e) {
+    log.error("系统异常", e);
+    return Result.error("系统异常");
+}
+```
+
+### 7.3 通用规范
+- 自定义业务异常继承 `RuntimeException`；按域拆分基类 + 错误码枚举。
+- 统一响应：`{ code, message, traceId, timestamp }`。
+- `@ControllerAdvice` 统一映射；记录 traceId。
+- message 包含上下文与关键参数（脱敏）；不含 SQL、内部类名。
+- 校验失败早返回；禁止以异常做正常控制流。
+- 日志级别：可预期业务异常 -> WARN；不可预期 -> ERROR。
+- 错误码层次：`Axx`（认证）`Bxx`（业务）`Cxx`（客户端参数）`Sxx`（系统）。
+
+## 8. 日志与可观测性
+
+### 8.1 日志级别
+- **ERROR**: 系统错误，需要立即处理
+- **WARN**: 警告信息，需要关注
+- **INFO**: 重要业务信息
+- **DEBUG**: 调试信息
+- **TRACE**: 极低层级追踪
+
+### 8.2 日志格式
+```java
+@Slf4j
+public class UserService {
+    private static final String CLASS_NAME = UserService.class.getSimpleName();
+    
+    public void saveUser(UserRequest request) {
+        Skymarker marker = Skymarker.create(CLASS_NAME, "saveUser");
+        log.info(marker, "保存用户信息: {}", request.getUserName());
+        try {
+            // 业务逻辑
+            log.info(marker, "用户保存成功");
+        } catch (Exception e) {
+            log.error(marker, "用户保存失败", e);
+            throw new BizException("用户保存失败");
+        }
+    }
+}
+```
+
+**注意**：优先使用 `@Slf4j` 注解生成日志记录器，避免手动创建 `private static final Logger log = LoggerFactory.getLogger(Xxx.class);`
+
+### 8.3 通用日志规范
+- 统一 SLF4J 占位符；禁止拼接。
+- 使用 MDC 注入 `traceId` / `spanId`；日志格式：时间 level traceId thread class message。
+- 大对象只输出 size + hash / 前缀片段；集合 >50 控制摘要。
+- 敏感数据脱敏（手机号中间四位、身份证中间八位）。
+- 定期治理噪音 ERROR，确保“可行动性”。
+
+### 8.4 指标 & Trace
+- Micrometer 暴露 JVM / 线程池 / GC / 自定义业务指标。
+- 分布式追踪：OpenTelemetry；禁止自定义不兼容 W3C 标头。
+- 关键路径增加延迟、错误率、超时计数。
+
+### 8.5 审计
+- 登录、支付、权限变更写入独立审计流，保留不可抵赖性（只追加存储）。
+
+## 9. 并发与线程模型
+- 使用 `CompletableFuture` / `ExecutorService`；线程池统一配置（核心数、队列、拒绝策略）。
+- 避免手写 `wait/notify`；优先 `CountDownLatch` / `Semaphore` / `Lock` / `ConcurrentHashMap`。
+- 共享可变状态最小化；使用不可变对象（构造后字段 final）。
+- 谨慎使用全局单例；若必须 -> 明确线程安全策略。
+
+## 10. 性能与资源优化
+- 热点路径前置基准（JMH）或监控；避免无依据“提前优化”。
+- 数据结构优先：访问模式 -> 选择 List/Map/Set/Queue。避免误用 LinkedList。
+- 批量操作 vs 单条循环远程调用：尽量合并。
+- I/O：使用连接池、超时、重试（幂等设计）。
+- 远程调用设置超时、熔断、限流与退避重试；防止级联雪崩。
+- 内存：大集合预估容量；避免装箱拆箱热点；关注 GC 暂停指标。
+
+## 11. 测试策略
+- 层次：单元（Mock）、组件（Spring 上下文）、集成（Testcontainers）、契约（OpenAPI diff）、端到端（关键路径）。
+- 命名：`should<行为>_when<条件>`；Given/When/Then 注释分隔。
+- 覆盖：核心领域不变式、异常路径、并发互斥、序列化边界、极值输入。
+- 覆盖率：核心域 ≥80%，其余风险评估；禁止为追求数字写“无断言”测试。
+- 使用 Builder/Fixture 减少样板；避免硬编码随机数据导致脆弱断言。
+- 测试稳定：不依赖外部不可控服务；使用 Testcontainers 并锁定镜像版本。
+- Flaky 测试 7 日内必须修复或移除并建任务。
+
+## 12. 安全与合规
+- 输入校验：Hibernate Validator + 业务层补充规则。
+- SQL：参数绑定；禁止字符串拼接 SQL。
+- 反序列化：白名单；禁用不受控反序列化。
+- 配置敏感：使用 Vault / KMS；禁止写入仓库。
+- XSS/CSRF：输出点统一转义；跨站写操作启用 CSRF 令牌或 SameSite Cookie。
+- 访问权限：最小权限；敏感操作二次确认或多因子。
+- 日志与审计：敏感数据脱敏；审计日志单独存储、不可篡改。
+- 依赖安全：CVE 高风险阻断构建，制定修复 SLA。
+
+## 13. 序列化与 JSON
+- 统一 ObjectMapper：UTC 时区、驼峰、忽略未知字段、必要时 Null 策略。
+- 避免循环引用：DTO 分层或 @JsonIgnore；不滥用双向管理注解。
+- 金额使用 BigDecimal；禁止 double 处理货币。
+- 版本演进：新增字段向后兼容；移除字段需废弃标记 + 迁移窗口。
+
+## 14. 构建与质量守护
+- 构建：Maven `mvn -T 1C clean verify`；Gradle 启用并行与配置缓存。
+- 静态分析：Spotless(格式) / Checkstyle(命名&长度) / PMD(潜在缺陷) / SpotBugs(字节码) / ErrorProne(可选) / OWASP 依赖扫描。
+- 质量阈值：新增高严重度问题=Fail；复杂度>10 方法需重构或注释豁免（附任务号）。
+- Git 钩子：`pre-commit` -> 格式化+局部单测；`pre-push` -> 全量测试+漏洞扫描。
+- CI 仪表盘：覆盖率 / 复杂度 / 依赖风险 / 构建耗时趋势。
+
+## 15. 配置与环境管理
+- Profile：`application.yml` + `application-{profile}.yml`；禁止代码里 if(profile)。
+- 使用 `@ConfigurationProperties` + `@Validated`；密钥从环境或密钥管理系统注入。
+- 可观测参数（采样率、限流阈值）支持热更新。
+- 环境隔离：缓存 / MQ / 数据库 分库分命名空间。
+
+## 16. 数据访问与持久化
+
+### 16.1 ORM框架使用
+```java
+@Getter
+@Setter
+@NoArgsConstructor
+@AllArgsConstructor
+@TableName("user")
+public class UserEntity {
+    @TableId(value = "id", type = IdType.AUTO)
+    private Long id;
+    
+    @TableField("user_name")
+    private String userName;
+}
+```
+
+**注意**：实体类优先使用 `@Getter @Setter @NoArgsConstructor @AllArgsConstructor`，避免使用 `@Data`（会生成 equals/hashCode，影响性能）
+
+### 16.2 Mapper接口
+```java
+@Mapper
+public interface UserMapper extends BaseMapper<UserEntity> {
+    // 自定义查询方法
+    List<UserEntity> selectByUserName(@Param("userName") String userName);
+}
+```
+
+### 16.3 通用数据访问规范
+- Repository 方法语义化；Service 禁止内嵌 SQL（除极特殊性能场景并注明原因）。
+- 分页查询限制最大页大小；统计 count 大表可估算或缓存。
+- 避免 N+1：批量/联表/二级缓存；启用慢 SQL 抽样与告警。
+- 显式列出字段：禁止 `SELECT *`。
+- 索引变更评估写入影响；废弃索引设置观察期。
+- 批量写入：分批（500~1000）+ 幂等（唯一业务键）。
+- 乐观锁（version 字段）与悲观锁结合处理高争用热点。
+- 软删除：`deleted` 标志 + 默认过滤；定期归档物理清理。
+
+## 17. API 设计与契约
+
+### 17.1 统一响应格式
+```java
+@Getter
+@Setter
+@NoArgsConstructor
+@AllArgsConstructor
+@Builder
+public class Result<T> {
+    private Integer code;
+    private String message;
+    private T data;
+    
+    public static <T> Result<T> success(T data) {
+        return Result.<T>builder()
+            .code(200)
+            .message("success")
+            .data(data)
+            .build();
+    }
+    
+    public static <T> Result<T> fail(String message) {
+        return Result.<T>builder()
+            .code(500)
+            .message(message)
+            .data(null)
+            .build();
+    }
+}
+```
+
+**注意**：DTO/Response 类优先使用 `@Getter @Setter @Builder` 等 Lombok 注解
+
+### 17.2 Controller响应
+```java
+@Slf4j
+@RestController
+@RequestMapping("/user")
+@RequiredArgsConstructor
+public class UserController {
+    private final UserService userService;
+    
+    @PostMapping("/save")
+    public Result<UserDTO> saveUser(@RequestBody UserRequest request) {
+        log.info("Saving user: {}", request.getUserName());
+        UserDTO user = userService.saveUser(request);
+        return Result.success(user);
+    }
+}
+```
+
+**注意**：Controller 类优先使用 `@Slf4j` 和 `@RequiredArgsConstructor` 进行依赖注入
+
+### 17.3 通用API设计规范
+- 资源复数：`/orders`；动作用子资源或状态字段：`/orders/{id}/cancel`。
+- 方法语义：GET 幂等；POST 创建；PUT 全量；PATCH 局部；DELETE 幂等删除。
+- 错误响应：`{ code, message, traceId }`；不暴露内部类名/堆栈。
+- 版本：`/api/v1`；废弃版本灰度 + 公告期。
+- 文档：OpenAPI 自动生成 + 契约测试防破坏性变更。
+- 限流：按用户/客户端/IP；429 返回 Retry-After。
+- 分页：参数 `page,size,sort`；响应 `{ items,page,size,total,hasNext }`。
+
+## 18. 版本控制与分支
+
+### 18.1 Git提交规范
+```
+feat: 新功能
+fix: 修复bug
+docs: 文档更新
+style: 代码格式调整
+refactor: 代码重构
+test: 测试相关
+chore: 构建过程或辅助工具的变动
+```
+
+### 18.2 分支管理
+- `main`: 主分支
+- `develop`: 开发分支
+- `feature/*`: 功能分支
+- `hotfix/*`: 紧急修复分支
+
+### 18.3 规范
+- Conventional Commits + SemVer；破坏性变更 `feat!:` 标签。
+- 自动生成 CHANGELOG；Release Tag 后禁止直接修改，需 hotfix 分支。
+- 主干保护：需评审 + CI + 安全扫描通过。
+
+## 19. 代码质量度量
+
+### 19.1 代码复杂度
+- 方法长度不超过50行
+- 圈复杂度不超过10
+- 参数个数不超过5个
+- 嵌套层级不超过4层
+
+### 19.2 代码重复
+- DRY原则：Don't Repeat Yourself
+- 提取公共方法
+- 使用工具类
+- 合理使用继承和组合
+
+### 19.3 代码自查速表
+- 类是否单一职责？
+- 方法是否 < 40 行？
+- 是否存在隐藏副作用？
+- 异常、日志是否足够定位？
+- 命名是否业务语义充分？
+
+### 19.4 代码审查要点
+- 代码逻辑正确性
+- 性能优化
+- 安全性检查
+- 代码规范遵循
+- 测试覆盖率
+
+### 19.5 审查流程
+1. 自检（单测+静态分析）
+2. 提交 PR（关联需求/缺陷号）
+3. Reviewer 审查（核心模块 ≥2 人）
+4. 反馈迭代（≤3 轮）
+5. 合并后监控观察（错误率/延迟）
+## 20. 事务管理
+
+### 20.1 声明式事务（推荐）
+```java
+@Transactional(rollbackFor = Exception.class)
+public void updateUser(UserEntity user) {
+    // 业务逻辑
+}
+```
+
+### 20.2 编程式事务
+```java
+@Autowired
+private TransactionTemplate transactionTemplate;
+
+public void updateUser(UserEntity user) {
+    transactionTemplate.execute(status -> {
+        try {
+            // 业务逻辑
+            return true;
+        } catch (Exception e) {
+            status.setRollbackOnly();
+            throw e;
+        }
+    });
+}
+```
+
+## 21. 工具类与通用组件
+
+### 21.0 工具库选择原则
+
+#### 优先级顺序
+1. **Apache Commons 系列**（首选）
+2. **Hutool 工具库**（补充）
+3. **自定义工具类**（必要时）
+
+#### 1. Apache Commons 系列（第一优先级）
+优先使用 Apache Commons 系列工具库，这是 Java 生态中最成熟、最稳定的工具库集合。
+
+**依赖引入**：
+```xml
+<!-- 字符串、数组、反射等通用工具 -->
+<dependency>
+    <groupId>org.apache.commons</groupId>
+    <artifactId>commons-lang3</artifactId>
+    <version>3.14.0</version>
+</dependency>
+
+<!-- 集合增强工具 -->
+<dependency>
+    <groupId>org.apache.commons</groupId>
+    <artifactId>commons-collections4</artifactId>
+    <version>4.4</version>
+</dependency>
+
+<!-- IO 操作工具 -->
+<dependency>
+    <groupId>commons-io</groupId>
+    <artifactId>commons-io</artifactId>
+    <version>2.15.1</version>
+</dependency>
+
+<!-- 编解码工具 -->
+<dependency>
+    <groupId>commons-codec</groupId>
+    <artifactId>commons-codec</artifactId>
+    <version>1.16.0</version>
+</dependency>
+```
+
+**常用场景**：
+- 字符串处理：使用 `StringUtils`（空值判断、格式化、拼接等）
+- 集合处理：使用 `CollectionUtils`（空值判断、交集并集等）
+- 数组操作：使用 `ArrayUtils`（数组判空、转换等）
+- 日期处理：使用 `DateUtils`、`DateFormatUtils`
+- IO操作：使用 `FileUtils`、`IOUtils`
+- 编解码：使用 `Base64`、`DigestUtils`（MD5、SHA等）
+- 对象工具：使用 `ObjectUtils`（空值判断、默认值等）
+
+**示例**：
+```java
+// 字符串工具
+String result = StringUtils.defaultIfBlank(input, "默认值");
+boolean isEmpty = StringUtils.isEmpty(str);
+
+// 集合工具
+if (CollectionUtils.isNotEmpty(list)) {
+    // 处理逻辑
+}
+
+// IO工具
+String content = FileUtils.readFileToString(file, StandardCharsets.UTF_8);
+```
+
+#### 2. Hutool 工具库（第二优先级）
+当 Apache Commons 未提供相应功能时，使用 Hutool 作为补充。
+
+**依赖引入**：
+```xml
+<dependency>
+    <groupId>cn.hutool</groupId>
+    <artifactId>hutool-all</artifactId>
+    <version>5.8.25</version>
+</dependency>
+```
+
+**补充场景**（Commons 未覆盖或不够完善的场景）：
+- HTTP 请求：使用 `HttpUtil` 进行 HTTP 调用
+- JSON 处理：使用 `JSONUtil` 进行 JSON 转换
+- 加密解密：使用 `SecureUtil` 进行复杂加密操作
+- Excel 处理：使用 `ExcelUtil` 进行 Excel 读写
+- 二维码：使用 `QrCodeUtil` 生成二维码
+- 拼音转换：使用 `PinyinUtil` 进行拼音处理
+- 身份证验证：使用 `IdcardUtil` 进行身份证校验
+
+**示例**：
+```java
+// HTTP请求
+String response = HttpUtil.get("https://api.example.com");
+
+// JSON处理
+JSONObject json = JSONUtil.parseObj(jsonStr);
+
+// Excel处理
+ExcelWriter writer = ExcelUtil.getWriter("output.xlsx");
+```
+
+#### 3. 自定义工具类（仅在必要时）
+**仅在以下情况自定义工具类**：
+- Apache Commons 和 Hutool 都未提供相应功能
+- 需要特定业务逻辑封装
+- 性能要求极高需要专门优化
+- 需要整合多个工具库的功能
+
+### 21.1 工具类设计
+```java
+@UtilityClass
+@Slf4j
+public final class DateUtils {
+    
+    /**
+     * 格式化日期
+     * 
+     * @param date 日期
+     * @param pattern 格式
+     * @return 格式化后的字符串
+     */
+    public static String format(Date date, String pattern) {
+        if (date == null) {
+            return null;
+        }
+        SimpleDateFormat sdf = new SimpleDateFormat(pattern);
+        return sdf.format(date);
+    }
+}
+```
+
+**注意**：工具类优先使用 `@UtilityClass` 注解，自动生成私有构造函数并标记为 final
+
+（上方为合并后提示语，以下冗余章节已删除。）
+
+（移除旧 25.x 配置示例，已涵盖于第 15 章，如需具体模板请在项目模板仓库维护。）
+
+## 22. 缓存策略
+### 22.1 使用原则
+- 读多写少 & 可接受短暂不一致使用缓存；强一致性以数据库为准。
+- key 设计：`业务:子域:主键`；防撞+易检索；必要时加版本前缀。
+### 22.2 失效与一致性
+- 写后删缓存（延迟双删需延时任务保障）或先更新 DB 再删缓存。
+- 防穿透：空值短 TTL + 布隆过滤。
+- 防击穿：热点 key 加互斥锁或本地缓存预热。
+- 防雪崩：过期时间随机扰动 + 分层预热。
+### 22.3 监控
+- 监控：命中率 / 失效率 / 重建耗时 / 大 key / 热点 key 排行。
+
+### 22.4 缓存使用示例
+```java
+@Slf4j
+@Service
+@RequiredArgsConstructor
+public class UserService {
+    private final UserRepository userRepository;
+    
+    @Cacheable(value = "user", key = "#id")
+    public UserDTO getUserById(Long id) {
+        log.info("Getting user by id: {}", id);
+        UserEntity entity = userRepository.findById(id)
+            .orElseThrow(() -> new UserNotFoundException("User not found: " + id));
+        return UserDTO.builder()
+            .id(entity.getId())
+            .name(entity.getName())
+            .email(entity.getEmail())
+            .build();
+    }
+    
+    @CacheEvict(value = "user", key = "#user.id")
+    public UserDTO updateUser(UserDTO user) {
+        log.info("Updating user: {}", user.getId());
+        // 更新逻辑
+        return user;
+    }
+}
+```
+
+**注意**：服务类优先使用 `@Slf4j` 和 `@RequiredArgsConstructor`，缓存方法使用 `@Cacheable` 和 `@CacheEvict`
+
+## 23. 部署与运行
+### 23.1 环境
+`dev` / `test` / `staging` / `prod`：明确外部依赖、日志级别、限流阈值差异。
+### 23.2 启动与健康
+- 启动失败必须非 0 退出；禁止吞异常继续。
+- 健康检查：`liveness`（进程存活） vs `readiness`（依赖就绪）。
+### 23.3 运行时保护
+- 限流（令牌桶/滑动窗口）+ 熔断（错误率 / 延迟）。
+- 降级策略：缓存兜底 / 默认值 / 限制功能；需用户可见提示。
+- 蓝绿/灰度发布：监控 P95/P99 延迟与错误率回退阈值。
+
+## 24. 扩展与演进建议
+
+### 24.1 架构演进
+- **领域驱动设计（DDD）**：若引入 DDD，需定制聚合、实体、值对象、领域服务、事件命名规范
+- **事件驱动架构**：Kafka Topic 规范（`域.上下文.事件`），幂等（唯一键）与重试策略
+- **多协议支持**：GraphQL/gRPC 补充契约与版本演进策略
+
+### 24.2 API演进与兼容性
+- **契约管理**：OpenAPI diff 驱动契约测试与告警
+- **版本演进**：灰度发布 + 废弃公告期 + 迁移指南
+- **向后兼容**：新增字段可选，移除字段需废弃标记
+
+### 24.3 安全演进
+- **零信任架构**：所有服务间调用均需认证
+- **细粒度权限**：基于资源和操作的权限控制
+- **敏感操作**：关键操作需二次确认或多因子认证
+
+### 24.4 性能基线
+- **压测规范**：压测报告模板（入口、场景、数据量、P95/P99、CPU/Heap、GC）
+- **性能监控**：建立性能基线，定期压测对比
+- **容量规划**：根据业务增长预测，提前进行容量评估
+
+### 24.5 技术债务管理
+- **定期重构**：每个迭代预留 20% 时间处理技术债务
+- **代码质量**：定期进行代码质量审查，控制技术债务增长
+- **依赖升级**：定期更新依赖版本，及时修复安全漏洞
+
+---
+
+**文档维护说明**：
+- 所有修订需通过评审并记录变更日志
+- 与 `coding-standards.mdc` / `quality.mdc` / `security.mdc` 协同使用
+- 冲突时以本文件中"专用 Java 细则"优先
+- 建议每季度审查一次，确保规约与技术栈同步更新

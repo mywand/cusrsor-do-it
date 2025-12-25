@@ -1,0 +1,134 @@
+---
+description: Observability (Logging, Metrics, Tracing, Alerting)
+globs: []
+alwaysApply: false
+---
+最近更新: 2025-09-18
+# Observability Guide
+
+## 1. 目标 (Goals)
+- 快速定位：问题发生 -> 5 分钟内能知道范围与根因候选。
+- 量化健康：核心指标仪表板实时反映 SLA 状态。
+- 可回放：关键业务路径具备足够上下文与追踪链路。
+
+## 2. 三大支柱
+| 支柱 | 作用 | 关键要素 |
+| ---- | ---- | -------- |
+| Logs | 定性分析 | 结构化 / 关键字段 / 采样策略 |
+| Metrics | 定量趋势 | 标签维度 / 聚合 / 阈值报警 |
+| Traces | 跨服务调用链 | span 层级 / 耗时 / 错误传播 |
+
+## 3. 日志 (Logging)
+- 结构化：JSON（字段：ts, level, traceId, spanId, userId, action, result, costMs, errorType）。
+- 分类：访问日志 / 业务日志 / 安全审计 / 异常日志 分开存储或打标签。
+- 采样：高 QPS 服务对 INFO 级别采样；错误级别全量。
+- 隐私：脱敏（手机号中间脱敏，身份证仅后4位）。
+
+## 4. 指标 (Metrics)
+| 类型 | 示例 | 注意 |
+| ---- | ---- | ---- |
+| Counter | 请求总数 / 错误总数 | 仅递增，不回退 |
+| Gauge | 当前队列长度 / 在线用户 | 快速波动可取平均 |
+| Histogram | 请求耗时 / 载荷大小 | 设定合适 bucket |
+| Summary | 自定义分位 | 不建议高并发全局使用 |
+
+核心指标：
+- 流量：QPS / 并发连接数
+- 性能：p50/p95/p99 Latency
+- 稳定性：Error Rate / Timeout Rate
+- 资源：CPU / 内存 / GC / FD / 线程池使用率
+- 容量：队列长度 / 缓存命中率 / DB 连接池耗尽次数
+
+## 5. 追踪 (Tracing)
+- 使用 OpenTelemetry：自动 + 手动埋点。
+- 根 span：入口（HTTP / 消息 / 定时任务）；子 span：外部调用 / DB / MQ。
+- 上下文传递：traceparent / baggage。
+- 大包/慢调用：记录 size / costMs 标签。
+
+### 5.1 Span / Trace 命名约定
+| 场景 | 命名模式 | 示例 |
+| ---- | -------- | ---- |
+| HTTP 入口 | http.<method>.<resource> | http.GET.orders.list |
+| RPC / 内部调用 | rpc.<service>.<operation> | rpc.payment.refund |
+| DB 查询 | db.<engine>.<operation> | db.postgres.select |
+| 消息生产 | mq.produce.<topic> | mq.produce.order.created |
+| 消息消费 | mq.consume.<topic> | mq.consume.order.created |
+| 定时任务 / 批处理 | job.<name> | job.settlement.rollup |
+| 外部第三方 API | ext.<provider>.<api> | ext.stripe.charge |
+
+规则：
+1. 动词小写；资源名复数；不含动态 ID（放 attributes：`order.id=123`）。
+2. 必要 attributes：`http.status_code`, `db.statement`(摘要), `peer.service`, `retry.count`。
+3. 避免无语义名称（如 `processTask`）。名称应支持聚合统计与过滤。
+4. 入口 span 附加发布版本：`service.version`；错误 span 标注 `error.type` / `error.message`。
+5. Attributes 不放敏感数据（账号、密钥、PII）。
+
+## 6. 事件 (Events)
+- 业务事件（下单成功 / 支付失败）结构化发往事件总线供分析。
+- 标准字段：eventId / eventType / occurredAt / version / payload。
+
+## 7. 告警 (Alerting)
+原则：只报警“需要人干预”的情况。
+| 类别 | 例子 | 动作 |
+| ---- | ---- | ---- |
+| 可用性 | Error Rate > 阈值 | 立刻通知值班 & 降级 |
+| 性能 | p99 > SLA * 1.5 持续 5 分钟 | 调整扩容/排查热点 |
+| 资源 | CPU > 85% 持续 10 分钟 | 扩容 / 优化任务 |
+| 安全 | 失败登录暴增 | 启动风控策略 |
+| 数据 | 队列堆积超阈 | 清理/扩容/暂停上游 |
+
+抑制：维护期静默 / 相关告警聚合去重。
+
+## 8. 可观测性在开发流程嵌入
+- 设计评审：列出需要新增的指标 & 事件 & 日志点位。
+- Code Review：检查 traceId 贯穿、日志结构与字段完整。
+- 发布前：验证仪表板与告警规则已更新。
+
+## 9. 仪表板 (Dashboards) 最小集合
+| 看板 | 指标 |
+| ---- | ---- |
+| 总览 | QPS / ErrorRate / Latency p95 / ActiveRequests |
+| 依赖 | 下游调用耗时 / 错误率 / 超时率 |
+| 资源 | CPU / 内存 / GC / 线程池 / 磁盘 IO |
+| 业务 | 下单数 / 支付成功率 / 转化漏斗 |
+| 队列 | 堆积 / 消费速率 / 滞留时间 |
+
+## 10. 采样策略建议
+- 全量：错误、安保、支付、资金类请求。
+- 采样：普通读操作可 1~5% Trace；高 QPS 服务动态调节。
+- 自适应采样：基于错误率/延迟突增临时提升采样比例。
+
+## 11. 性能剖析（Profile）
+- 周期 CPU / 内存快照（生产低频）。
+- 定位慢查询：APM + SQL Trace。
+- GC 监控：Young / Full GC 次数与停顿时间。
+
+## 12. SLO / SLA / SLI
+- SLI：测量指标（成功率 = 成功请求 / 总请求）。
+- SLO：目标（成功率 ≥ 99.5%，p95 < 300ms）。
+- Error Budget：允许失败窗口（支持弹性发布与特性开关）。
+
+## 13. 变更溯源
+- 所有发布事件记录：版本号 / 提交哈希 / 时间 / 发布人 / 变更摘要。
+- 回滚策略与触发条件文档化。
+
+## 14. 数据保留与成本
+- 热数据：近 7 天全量。
+- 温数据：7~30 天聚合。
+- 冷数据：>30 天只保留关键审计事件。
+
+## 15. 自查清单
+- [ ] 核心路径有 trace 覆盖
+- [ ] 关键外部依赖指标已采集
+- [ ] 日志无敏感数据
+- [ ] 告警无明显噪音 / 无人处理积压
+- [ ] 仪表板指标齐全且布局合理
+- [ ] 版本发布事件可追踪
+
+## 16. 与其他规范关系
+- 编码：`coding-standards.mdc`
+- 测试：`testing.mdc`
+- 安全：`security.mdc`
+- 文档：`document.mdc`
+
+(可扩展：实时分析 / 数据血缘 / 混沌工程。)

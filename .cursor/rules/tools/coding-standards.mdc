@@ -1,0 +1,421 @@
+---
+description: 跨语言通用编码规范
+globs: []
+alwaysApply: true
+---
+最近更新: 2025-10-10
+
+# 跨语言通用编码规范
+
+> 适用于所有编程语言的通用编码标准和最佳实践
+
+## 1. 命名规范
+
+### 1.1 通用原则
+- **有意义**: 名称应该清楚表达意图
+- **可读性**: 避免缩写和单字母变量（除了循环计数器）
+- **一致性**: 在同一项目中保持命名风格一致
+- **避免误导**: 不使用容易混淆的名称
+
+```javascript
+// ❌ 不好的命名
+let d = new Date()
+let u = users.filter(x => x.a)
+function calc(a, b) { return a * b * 0.1 }
+
+// ✅ 好的命名
+let currentDate = new Date()
+let activeUsers = users.filter(user => user.isActive)
+function calculateDiscount(price, quantity) { return price * quantity * 0.1 }
+```
+
+### 1.2 函数命名
+- 使用动词开头，清楚表达函数的作用
+- 布尔函数使用 `is`、`has`、`can`、`should` 等前缀
+
+```python
+# ✅ 好的函数命名
+def get_user_by_id(user_id):
+def create_new_order(order_data):
+def is_valid_email(email):
+def has_permission(user, resource):
+def can_access_resource(user, resource):
+```
+
+### 1.3 变量命名
+- 使用名词或名词短语
+- 集合使用复数形式
+- 常量使用全大写（根据语言习惯）
+
+```java
+// ✅ 好的变量命名
+String userName;
+List<User> activeUsers;
+final int MAX_RETRY_COUNT = 3;
+boolean isProcessing;
+```
+
+## 2. 函数设计
+
+### 2.1 单一职责原则
+每个函数应该只做一件事，并且把它做好。
+
+```typescript
+// ❌ 职责过多
+function processUserData(userData: any) {
+  // 验证数据
+  if (!userData.email) throw new Error('邮箱必填')
+  
+  // 保存到数据库
+  database.save(userData)
+  
+  // 发送邮件
+  emailService.send(userData.email, 'welcome')
+  
+  // 记录日志
+  logger.info('用户创建成功')
+}
+
+// ✅ 职责分离
+function validateUserData(userData: UserData): void {
+  if (!userData.email) throw new Error('邮箱必填')
+}
+
+function saveUser(userData: UserData): User {
+  return database.save(userData)
+}
+
+function sendWelcomeEmail(email: string): void {
+  emailService.send(email, 'welcome')
+}
+
+function createUser(userData: UserData): User {
+  validateUserData(userData)
+  const user = saveUser(userData)
+  sendWelcomeEmail(userData.email)
+  logger.info('用户创建成功', { userId: user.id })
+  return user
+}
+```
+
+### 2.2 参数控制
+- 函数参数不超过 3-4 个
+- 使用对象传递多个参数
+- 提供合理的默认值
+
+```python
+# ❌ 参数过多
+def create_user(name, email, age, phone, address, city, country, postal_code):
+    pass
+
+# ✅ 使用对象封装
+def create_user(user_data: UserData):
+    pass
+
+# 或使用字典（Python）
+def create_user(name: str, email: str, **kwargs):
+    age = kwargs.get('age', 18)
+    phone = kwargs.get('phone', '')
+    # ...
+```
+
+### 2.3 返回值设计
+- 保持返回类型一致
+- 避免返回 null/None，考虑使用 Optional 或异常
+- 复杂返回值使用明确的数据结构
+
+```csharp
+// ❌ 不一致的返回类型
+public object GetUserData(int id)
+{
+    if (id <= 0) return null;
+    if (id == 999) return "error";
+    return new User { Id = id };
+}
+
+// ✅ 一致的返回类型
+public User? GetUser(int id)
+{
+    if (id <= 0) return null;
+    return repository.GetById(id);
+}
+
+// 或使用 Result 模式
+public Result<User> GetUser(int id)
+{
+    if (id <= 0) 
+        return Result<User>.Failure("无效的用户ID");
+    
+    var user = repository.GetById(id);
+    return user != null 
+        ? Result<User>.Success(user)
+        : Result<User>.Failure("用户不存在");
+}
+```
+
+## 3. 错误处理
+
+### 3.1 异常处理原则
+- 尽早失败：在问题发生时立即抛出异常
+- 使用具体的异常类型
+- 提供有意义的错误消息
+- 在适当的层级处理异常
+
+```java
+// ✅ 好的异常处理
+public class UserService {
+    public User createUser(CreateUserRequest request) {
+        // 参数验证
+        if (request == null) {
+            throw new IllegalArgumentException("创建用户请求不能为空");
+        }
+        
+        if (StringUtils.isBlank(request.getEmail())) {
+            throw new ValidationException("邮箱地址不能为空");
+        }
+        
+        // 业务逻辑验证
+        if (userRepository.existsByEmail(request.getEmail())) {
+            throw new BusinessException("邮箱地址已被使用");
+        }
+        
+        try {
+            return userRepository.save(new User(request));
+        } catch (DataAccessException e) {
+            logger.error("保存用户失败", e);
+            throw new ServiceException("用户创建失败，请稍后重试", e);
+        }
+    }
+}
+```
+
+### 3.2 错误码设计
+```typescript
+// 定义错误码枚举
+enum ErrorCode {
+  VALIDATION_ERROR = 'VALIDATION_ERROR',
+  USER_NOT_FOUND = 'USER_NOT_FOUND',
+  PERMISSION_DENIED = 'PERMISSION_DENIED',
+  INTERNAL_ERROR = 'INTERNAL_ERROR'
+}
+
+// 标准化错误响应
+interface ErrorResponse {
+  code: ErrorCode
+  message: string
+  details?: any
+  timestamp: string
+}
+
+// 错误处理函数
+function handleError(error: Error): ErrorResponse {
+  return {
+    code: ErrorCode.INTERNAL_ERROR,
+    message: error.message,
+    timestamp: new Date().toISOString()
+  }
+}
+```
+
+## 4. 注释规范
+
+### 4.1 注释原则
+- 解释"为什么"而不是"是什么"
+- 复杂算法必须有注释
+- 公共接口必须有文档注释
+- 保持注释与代码同步
+
+```python
+def calculate_compound_interest(principal, rate, time, compound_frequency):
+    """
+    计算复利
+    
+    Args:
+        principal: 本金
+        rate: 年利率（小数形式，如 0.05 表示 5%）
+        time: 投资年数
+        compound_frequency: 每年复利次数
+    
+    Returns:
+        最终金额
+    
+    Example:
+        >>> calculate_compound_interest(1000, 0.05, 2, 4)
+        1103.81
+    """
+    # 使用复利公式: A = P(1 + r/n)^(nt)
+    # 这里 n 是每年复利次数，t 是年数
+    return principal * (1 + rate / compound_frequency) ** (compound_frequency * time)
+```
+
+### 4.2 代码注释类型
+```javascript
+// TODO: 需要优化性能，考虑使用缓存
+// FIXME: 这里有潜在的内存泄漏问题
+// HACK: 临时解决方案，等待 API 更新
+// NOTE: 这个算法基于 RFC 3986 标准
+
+/**
+ * 用户服务类
+ * 负责处理用户相关的业务逻辑
+ */
+class UserService {
+  /**
+   * 根据ID获取用户
+   * @param {number} id - 用户ID
+   * @returns {Promise<User|null>} 用户对象或null
+   * @throws {ValidationError} 当ID无效时抛出
+   */
+  async getUserById(id) {
+    // 实现逻辑
+  }
+}
+```
+
+## 5. 代码结构
+
+### 5.1 文件组织
+```
+project/
+├── src/
+│   ├── controllers/     # 控制器层
+│   ├── services/        # 业务逻辑层
+│   ├── repositories/    # 数据访问层
+│   ├── models/          # 数据模型
+│   ├── utils/           # 工具函数
+│   ├── types/           # 类型定义
+│   └── constants/       # 常量定义
+├── tests/               # 测试文件
+├── docs/                # 文档
+└── config/              # 配置文件
+```
+
+### 5.2 模块导入顺序
+```python
+# 1. 标准库导入
+import os
+import sys
+from datetime import datetime
+
+# 2. 第三方库导入
+import requests
+from flask import Flask
+
+# 3. 本地应用导入
+from .models import User
+from .services import UserService
+from ..utils import logger
+```
+
+## 6. 性能考虑
+
+### 6.1 算法复杂度
+- 优先选择时间复杂度低的算法
+- 注意空间复杂度
+- 避免不必要的嵌套循环
+
+```javascript
+// ❌ O(n²) 复杂度
+function findDuplicates(arr) {
+  const duplicates = []
+  for (let i = 0; i < arr.length; i++) {
+    for (let j = i + 1; j < arr.length; j++) {
+      if (arr[i] === arr[j] && !duplicates.includes(arr[i])) {
+        duplicates.push(arr[i])
+      }
+    }
+  }
+  return duplicates
+}
+
+// ✅ O(n) 复杂度
+function findDuplicates(arr) {
+  const seen = new Set()
+  const duplicates = new Set()
+  
+  for (const item of arr) {
+    if (seen.has(item)) {
+      duplicates.add(item)
+    } else {
+      seen.add(item)
+    }
+  }
+  
+  return Array.from(duplicates)
+}
+```
+
+### 6.2 资源管理
+```python
+# ✅ 使用上下文管理器自动释放资源
+with open('file.txt', 'r') as f:
+    content = f.read()
+    # 文件会自动关闭
+
+# ✅ 数据库连接管理
+def get_user(user_id):
+    with get_db_connection() as conn:
+        cursor = conn.cursor()
+        cursor.execute("SELECT * FROM users WHERE id = ?", (user_id,))
+        return cursor.fetchone()
+    # 连接会自动关闭
+```
+
+## 7. 安全编码
+
+### 7.1 输入验证
+```java
+// ✅ 严格的输入验证
+public class UserController {
+    private static final Pattern EMAIL_PATTERN = 
+        Pattern.compile("^[A-Za-z0-9+_.-]+@[A-Za-z0-9.-]+\\.[A-Za-z]{2,}$");
+    
+    public ResponseEntity<User> createUser(@RequestBody CreateUserRequest request) {
+        // 验证邮箱格式
+        if (!EMAIL_PATTERN.matcher(request.getEmail()).matches()) {
+            throw new ValidationException("邮箱格式不正确");
+        }
+        
+        // 验证密码强度
+        if (!isStrongPassword(request.getPassword())) {
+            throw new ValidationException("密码强度不够");
+        }
+        
+        // 防止 XSS
+        String sanitizedName = HtmlUtils.htmlEscape(request.getName());
+        
+        return ResponseEntity.ok(userService.createUser(request));
+    }
+}
+```
+
+### 7.2 敏感信息处理
+```typescript
+// ✅ 敏感信息处理
+class User {
+  constructor(
+    public id: number,
+    public name: string,
+    public email: string,
+    private password: string  // 私有字段
+  ) {}
+  
+  // 序列化时排除敏感信息
+  toJSON() {
+    return {
+      id: this.id,
+      name: this.name,
+      email: this.email
+      // 不包含 password
+    }
+  }
+  
+  // 验证密码但不暴露
+  verifyPassword(inputPassword: string): boolean {
+    return bcrypt.compare(inputPassword, this.password)
+  }
+}
+```
+
+---
+**重要**: 这些规范是代码质量的基础，应该在所有项目中严格遵循。

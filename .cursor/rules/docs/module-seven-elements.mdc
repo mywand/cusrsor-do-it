@@ -1,0 +1,459 @@
+---
+description: Module design seven elements detailed specification (模块设计七要素详细规范)
+globs: []
+alwaysApply: false
+---
+最近更新: 2025-10-28
+最近审阅: 2025-10-28
+# 模块设计七要素详细规范
+
+> **文件编码**：UTF-8, 无 BOM
+> 
+> **本文档内容**：第3-9章 - 七要素详细设计规范
+
+## 📚 文档导航
+
+| 文档 | 内容 |
+|------|------|
+| 📖 [主文档](./module-design-guidelines.mdc) | 核心设计原则、文档概述、七要素框架 |
+| 📘 **当前文档** | 第3-9章：背景、角色、模型、流程、状态、接口、数据 |
+| 📙 [质量保障指南](./module-quality-assurance.mdc) | 第10-15章：NFR、监控、安全、风险 |
+| 📕 [工程实践指南](./module-engineering-practices.mdc) | 第16-24章：技术债、评审、演进、快速指南 |
+
+---
+
+## 3. 背景与目标（要素一）
+
+### 3.1 设计目标
+在模块设计文档中，需要明确回答：
+- **业务背景**：当前痛点是什么？为什么需要这个模块？
+- **核心目标**：要达成什么业务价值？（需可量化）
+- **非目标**：明确不做什么，避免范围蔓延
+- **成功标准**：如何衡量模块是否成功？
+
+### 3.2 目标描述模板
+| 维度 | 说明 | 示例 |
+|------|------|------|
+| **业务背景** | 当前问题/痛点 | 现有结算流程手工操作多，错误率高达5% |
+| **核心目标** | 要达成的效果（可量化） | 自动化结算，错误率<0.1%，处理时间<1小时 |
+| **非目标** | 明确不在范围内 | 不包含跨境结算、不支持实时结算 |
+| **度量指标** | 成功的量化标准 | 错误率、处理时长、人工介入次数 |
+| **依赖假设** | 前置条件 | 订单数据完整、商家信息准确 |
+
+### 3.3 目标自检清单
+- [ ] 目标是否可量化？（有具体数字或标准）
+- [ ] 是否说明了业务价值？（而非仅技术实现）
+- [ ] 非目标是否明确？（避免范围蔓延）
+- [ ] 度量指标是否可测量？（有监控手段）
+- [ ] 依赖假设是否清晰？（风险可控）
+
+---
+
+## 4. 角色与用例（要素二）
+
+### 4.1 角色识别
+| 角色类型 | 说明 | 示例 | 关键需求 |
+|----------|------|------|----------|
+| **主要用户** | 直接使用系统的人 | 运营人员、商家 | 操作便捷、结果可见 |
+| **管理员** | 系统管理和维护 | 系统管理员 | 监控、配置、问题排查 |
+| **外部系统** | 通过API调用 | 订单系统、支付系统 | 接口稳定、响应快速 |
+| **内部服务** | 同组织内的服务 | 通知服务、审计服务 | 事件及时、数据一致 |
+
+### 4.2 用例设计模板
+| 用例ID | 用例名称 | 触发角色 | 前置条件 | 主成功路径 | 异常分支 | 后置条件 |
+|--------|----------|----------|----------|------------|----------|----------|
+| UC-001 | 创建结算批次 | 系统定时任务 | 有待结算订单 | 1. 查询订单<br>2. 生成批次<br>3. 发布事件 | 订单为空/重复创建 | 批次创建完成 |
+
+### 4.3 用例自检清单
+- [ ] 是否覆盖了所有主要角色？
+- [ ] 是否有主成功路径描述？
+- [ ] 是否有异常分支处理？
+- [ ] 是否有前置和后置条件？
+- [ ] 是否有时序图或流程图支撑？
+
+---
+
+## 5. 模型与不变量（要素三）
+
+### 5.1 领域模型设计
+
+#### 聚合设计原则
+> 参考[主文档](./module-design-guidelines.mdc)第0.2节 DDD原则
+
+- 聚合要小：不超过3层深度
+- 通过ID引用其他聚合
+- 聚合内保证强一致性
+- 聚合间最终一致性
+
+#### 实体vs值对象
+| 类型 | 特征 | 判断标准 | 示例 |
+|------|------|----------|------|
+| **实体** | 有唯一标识，可变 | 需要追踪其生命周期 | 订单、用户、商品 |
+| **值对象** | 无标识，不可变 | 可替换、描述性概念 | 金额、地址、时间范围 |
+
+### 5.2 不变量设计
+不变量是业务规则的体现，必须在聚合边界内始终保持：
+- **数据完整性**：必填字段、取值范围、格式约束
+- **业务规则**：订单金额=各项之和、库存不能为负
+- **状态约束**：已支付订单不能取消
+
+### 5.3 模型设计模板
+```mermaid
+classDiagram
+    class SettlementBatch {
+        <<AggregateRoot>>
+        +Long id
+        +String batchNo
+        +Period period
+        +Status status
+        +Money totalAmount
+        +List~SettlementItem~ items
+        +createBatch()
+        +addItem()
+        +complete()
+        -checkInvariant()
+    }
+    class SettlementItem {
+        <<Entity>>
+        +Long id
+        +Long batchId
+        +Long merchantId
+        +Money amount
+        +calculateAmount()
+    }
+    class Money {
+        <<ValueObject>>
+        +BigDecimal amount
+        +String currency
+        +add(Money other)
+    }
+    class Status {
+        <<Enum>>
+        INIT
+        PROCESSING
+        COMPLETED
+        FAILED
+    }
+    SettlementBatch "1" *-- "*" SettlementItem
+    SettlementBatch --> Money
+    SettlementBatch --> Status
+```
+
+### 5.4 模型自检清单
+- [ ] 聚合根是否明确？
+- [ ] 聚合大小是否合理（≤3层）？
+- [ ] 实体和值对象分类是否正确？
+- [ ] 不变量是否在代码中体现？
+- [ ] 是否通过ID引用其他聚合？
+
+---
+
+## 6. 流程与时序（要素四）
+
+### 6.1 时序设计方法
+- **主成功路径**：最常见的业务流程，覆盖 80% 使用场景
+- **异常分支**：失败、超时、重试、补偿等场景
+- **并发场景**：多用户同时操作的竞态处理
+- **边界条件**：空数据、极值、限流等特殊情况
+
+### 6.2 时序图设计要素
+```mermaid
+sequenceDiagram
+  participant Actor as Actor
+  participant API as API Layer
+  participant Svc as DomainService
+  participant Repo as Repository
+  participant Bus as EventBus
+  Note over Actor,Repo: 示例请替换成你的主成功路径
+  Actor->>API: POST /<resource>
+  API->>Svc: validateAndDispatch()
+  Svc->>Repo: loadOrCreate()
+  alt 资源已存在
+    Repo-->>Svc: existing
+    Svc-->>API: Conflict
+  else 创建新资源
+    Repo-->>Svc: newId
+    loop 批量处理(可选)
+      Svc->>Repo: persistChunk()
+    end
+    Svc->>Bus: publish DomainEvent
+    Bus-->>Svc: ack
+    Svc-->>API: Created
+  end
+  API-->>Actor: Result
+```
+
+### 6.3 异常流程设计
+```mermaid
+flowchart TD
+  A[开始 / Start] --> B{关键前置校验?}
+  B -->|否| C[返回错误 / Fail Fast]
+  B -->|是| D[主业务步骤1]
+  D --> E{分支条件?}
+  E -->|路径A| F[步骤A]
+  E -->|路径B| G[步骤B]
+  F --> H[持久化/发布事件]
+  G --> H
+  H --> I{后置校验/异步补偿?}
+  I -->|需要| J[登记补偿任务]
+  I -->|不需要| K[完成 / Done]
+  J --> K
+```
+
+### 6.4 并发与竞态处理
+> 参考[主文档](./module-design-guidelines.mdc)第0.5节 并发与性能设计原则
+
+- **乐观锁**：使用 version 字段防止并发修改
+- **分布式锁**：关键资源使用 Redis 分布式锁
+- **队列串行化**：高并发操作通过消息队列串行处理
+- **幂等设计**：基于业务键去重，支持安全重试
+
+---
+
+## 7. 状态机设计（要素五）
+
+### 7.1 状态机设计原则
+- **状态唯一性**：任何时刻实体只能处于一个状态
+- **转换明确性**：状态转换必须有明确的触发事件和条件
+- **不可逆性**：业务关键状态转换不可逆（如支付完成）
+- **守卫条件**：状态转换前的前置检查
+
+### 7.2 状态机设计模板
+```mermaid
+stateDiagram-v2
+  [*] --> INIT
+  INIT --> ACTIVE : START
+  ACTIVE --> VALIDATING : PRE_CONDITION_OK
+  VALIDATING --> ACTIVE : RETRY (可选)
+  VALIDATING --> COMPLETED : PASS
+  VALIDATING --> FAILED : FAIL
+  FAILED --> INIT : MANUAL_RESET (受控)
+  COMPLETED --> [*]
+  state ACTIVE {
+    [*] --> PHASE1
+    PHASE1 --> PHASE2
+    PHASE2 --> PHASE3
+    PHASE3 --> [*]
+  }
+```
+
+### 7.3 状态转换表
+| 当前状态 | 触发事件 | 目标状态 | 守卫条件示例 | 副作用示例 |
+| -------- | -------- | -------- | ------------ | -------------- |
+| (None) | CREATE | INIT | 输入合法 | 创建主记录 |
+| INIT | START | ACTIVE | 资源未锁定 | 记录开始时间 |
+| ACTIVE | PRE_CONDITION_OK | VALIDATING | 所有子任务完成 | 汇总/聚合 |
+| VALIDATING | PASS | COMPLETED | 校验通过 | 发布完成事件 |
+| VALIDATING | FAIL | FAILED | 不变量不满足 | 记录失败原因 |
+| ACTIVE | TIMEOUT | FAILED | 超过阈值 | 标记超时 |
+| FAILED | MANUAL_RESET | INIT | 管理审核 | 生成重试日志 |
+
+### 7.4 事件驱动设计（结构视图）
+```mermaid
+sequenceDiagram
+  participant Domain
+  participant Outbox
+  participant Relay
+  participant EventBus
+  participant Consumer
+  Domain->>Outbox: 保存事件(事务内)
+  loop Relay轮询
+    Relay->>Outbox: 拉取NEW
+    Outbox-->>Relay: 事件批次
+    Relay->>EventBus: 投递
+    EventBus-->>Consumer: 分发
+  end
+  note over Domain,Consumer: 幂等=事件ID 或 业务键
+```
+> 关键点：事件存储与业务写操作同事务；投递异步；重复投递通过幂等键去重。
+
+---
+
+## 8. 接口与事件契约（要素六）
+
+### 8.1 API 设计详细指南
+
+#### RESTful 设计原则
+> 参考[主文档](./module-design-guidelines.mdc)第0.3节 API设计原则
+
+- **资源命名**：使用名词复数（`/settlements`）
+- **HTTP 动词**：GET(查询)/POST(创建)/PUT(更新)/DELETE(删除)
+- **状态码**：200(成功)/201(创建)/400(参数错误)/401(未授权)/404(不存在)/409(冲突)/500(服务器错误)
+- **幂等性**：GET/PUT/DELETE 天然幂等，POST 通过业务键实现幂等
+
+#### API 契约表（完整版）
+| 资源路径 | 方法 | 请求模型 | 响应模型 | 错误码范围 | 幂等键 | SLA超时 | 限流示例 |
+| -------- | ---- | -------- | -------- | ---------- | -------- | -------- | ---------- |
+| /<resource> | POST | Create<Res>Request | 201 + <Res>Info | X001-X010 | clientToken或业务键 | 50ms | 100/min |
+| /<resource>/{id} | GET | - | 200 + <Res>Detail | X011-X015 | - | 30ms | 500/min |
+| /<resource>/{id} | PUT | Update<Res>Request | 200 + <Res>Info | X016-X025 | id | 80ms | 200/min |
+| /<resource>/{id}/actions | POST | ActionRequest | 202 + TaskId | X026-X035 | actionId | 100ms | 50/min |
+| /<resource>/list | GET | Query<Res>Request | 200 + Page<Res> | X036-X045 | - | 120ms | 300/min |
+
+#### 请求/响应结构设计（图示表达）
+> 注：为兼容不支持思维导图语法的渲染器，以下以 `flowchart` 表达层级关系（原为导图样式）。
+
+```mermaid
+flowchart TB
+  classDef group fill:#f1f5f9,stroke:#94a3b8,color:#0f172a
+  A([Create<Res>Request])
+  subgraph 必填
+    A1[fieldA\n(格式/枚举)]
+    A2[fieldB\n(主业务键)]
+  end
+  subgraph 可选
+    B1[optionX:boolean]
+    B2[optionY:list]
+  end
+  subgraph 约束
+    C1[校验: 长度/范围/格式]
+    C2[权限: 角色/策略]
+    C3[幂等: 业务键或 Token]
+  end
+  A --> A1 & A2 & B1 & B2 & C1 & C2 & C3
+  class A1,A2,B1,B2,C1,C2,C3 group
+```
+
+```mermaid
+flowchart TB
+  classDef group fill:#f1f5f9,stroke:#94a3b8,color:#0f172a
+  R([<Res>Info])
+  subgraph 核心
+    R1[id]
+    R2[status]
+    R3[primaryMetric?]
+  end
+  subgraph 统计_扩展
+    S1[metric1]
+    S2[metric2?]
+  end
+  subgraph 时间
+    T1[createdAt]
+    T2[updatedAt?]
+  end
+  subgraph Meta
+    M1[traceId]
+  end
+  R --> R1 & R2 & R3 & S1 & S2 & T1 & T2 & M1
+```
+
+```mermaid
+flowchart TB
+  E([ApiError])
+  E --> E1[code (X*** 范围)]
+  E --> E2[message]
+  E --> E3[details? JSON]
+  E --> E4[traceId]
+  E --> E5[timestamp]
+  subgraph 分类
+    C1[校验]
+    C2[冲突]
+    C3[下游失败]
+    C4[系统异常]
+  end
+  E --> C1 & C2 & C3 & C4
+```
+
+### 8.2 事件设计详细指南
+
+#### 事件命名规范
+- **命名格式**：`{boundedContext}.{entity}.{pastTenseAction}` (示例：不在规约正文给出；在项目内具体文档体现)
+- **动词时态**：使用过去时（created / updated / failed）。
+
+#### 事件契约表（完整版）
+| 事件类型 | 触发时机 | 载荷关键字段 | 订阅方类别 | 幂等字段示例 | 重试策略 | 顺序需求 |
+| -------- | -------- | -------------- | ---------- | ------------- | ---------- | ---------- |
+| <bc>.<entity>.created | 创建成功 | id, creatorId | 监控/索引 | id | 指数退避≤3 | 无或按实体 |
+| <bc>.<entity>.processing | 处理中/阶段变更 | id, stage | 监控 | id+stage | 指数退避≤3 | 无 |
+| <bc>.<entity>.completed | 完成 | id, duration | 下游集成 | id | 指数退避≤5 | 按实体 |
+| <bc>.<entity>.failed | 失败 | id, errorCode | 告警/运维 | id | 不重试 | 无 |
+| <bc>.<child>.created | 子资源生成 | childId,parentId | 审计 | childId | 指数退避≤3 | 按父实体 |
+
+#### 事件载荷设计（字段分层图）
+```mermaid
+flowchart TB
+  BE([BaseEvent])
+  subgraph 元信息
+    M1[eventId: UUID]
+    M2[eventType: PastTense]
+    M3[version: MAJOR.MINOR]
+    M4[timestamp: ISO8601]
+    M5[source: service]
+  end
+  subgraph 追踪
+    T1[traceId]
+    T2[correlationId]
+  end
+  subgraph 数据
+    D1[aggregateId]
+    D2[domainFields ...]
+  end
+  subgraph 兼容策略
+    C1[仅新增可选字段]
+    C2[不重命名]
+    C3[废弃=文档标注]
+  end
+  BE --> M1 & M2 & M3 & M4 & M5 & T1 & T2 & D1 & D2 & C1 & C2 & C3
+```
+
+---
+
+## 9. 数据存储与索引设计（要素七）
+
+### 9.1 数据建模原则
+> 参考[主文档](./module-design-guidelines.mdc)第0.4节 数据建模原则
+
+- **范式权衡**：OLTP 适度范式化，OLAP 可反范式化
+- **索引策略**：查询优先，写入性能兼顾
+- **分区设计**：按时间/业务维度分区，支持数据生命周期管理
+- **数据类型**：精度优先（Decimal 而非 Float），时区统一（UTC）
+
+### 9.2 表结构设计模板
+> （此处不放具体 DDL）请在项目数据库版本控制仓库维护实际脚本；模块文档仅列：表角色、关键约束、主/二级索引、分区策略、生命周期策略。
+
+### 9.3 索引设计策略
+
+#### 查询模式分析
+| 查询类型 | 频率 | 查询条件 | 推荐索引 | 备注 |
+| -------- | ---- | -------- | -------- | ---- |
+| 批次详情查询 | 高 | batch_id | 主键 | 点查询 |
+| 周期批次查询 | 中 | period | uk_period | 唯一约束兼索引 |
+| 状态统计查询 | 中 | status + 时间范围 | idx_status_created | 复合索引 |
+| 商家明细查询 | 高 | merchant_id + 时间范围 | idx_merchant_created | 分页查询优化 |
+| 订单关联查询 | 低 | order_id | idx_order_id | 关联查询 |
+
+#### 分区策略
+- **时间分区**：按月分区，便于数据归档和性能优化
+- **分区维护**：自动创建未来分区，定期归档历史分区
+- **查询优化**：查询时指定分区条件，避免全表扫描
+
+### 9.4 数据生命周期管理（策略图）
+```mermaid
+timeline
+    title 生命周期阶段
+    section 热数据
+      0-3月: 主表高性能索引
+    section 温数据
+      3-12月: 归档表(压缩/只读)
+    section 冷数据
+      >12月: 对象存储(按需恢复)
+```
+策略：按月定时归档→校验行数一致→再删除主表旧分区；恢复流程需回填索引与统计信息。
+
+---
+
+## 下一步
+
+完成七要素设计后：
+
+1. **质量评审** → 查看[质量保障指南](./module-quality-assurance.mdc)
+2. **工程实践** → 查看[工程实践指南](./module-engineering-practices.mdc)
+3. **设计原则回顾** → 返回[主文档](./module-design-guidelines.mdc)
+
+---
+
+## 文档修订历史
+
+- **2025-10-28**：从主文档拆分独立
+  - 包含第3-9章：七要素详细设计规范
+  - 添加文档导航和跨文档引用

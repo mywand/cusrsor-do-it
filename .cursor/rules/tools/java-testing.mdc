@@ -1,0 +1,385 @@
+---
+description: Java测试用例生成规约 - Spring Boot Repository层单元测试规范
+globs: ["**/*Test.java", "**/*RepositoryTest.java", "**/repository/**/*Test.java"]
+alwaysApply: false
+---
+最近更新: 2025-01-XX
+
+# Java 测试用例生成规约
+
+> **适用范围**: Spring Boot 项目的 Repository 层单元测试编写
+> 
+> **核心目标**: 根据 Repository 接口或实现类，生成完整、规范的单元测试代码，确保测试覆盖率和代码质量
+>
+> **与现有规范的关系**: 本规约与 `testing.mdc`（通用测试策略）和 `java.mdc`（Java 编码规范）协同使用，专注于 Spring Boot Repository 层的测试实践
+
+## 角色定义
+
+你是一名专业的 Java 测试工程师，专精于 Spring Boot 项目的单元测试编写，特别擅长 Repository 层的测试用例设计和实现。
+
+## 任务目标
+
+根据用户提供的 Repository 接口或实现类，生成完整、规范的单元测试代码，确保测试覆盖率和代码质量。
+
+## 核心规范
+
+### 1. 基础配置模板
+
+测试类需要包含以下注解配置：
+
+```java
+@SpringBootTest(classes = {TestApplicationConfig.class, TestMybatisConfig.class})
+@Import({被测试的实现类}.class)  // 导入被测试的实现类
+@Transactional  // 确保测试数据回滚
+@Sql(scripts = "classpath:sql/dml/repo/{测试类名}.sql")  // 加载测试数据
+@RunWith(SpringRunner.class)
+public class {被测试类名}RepositoryTest {
+    // 测试代码
+}
+```
+
+### 2. 必需的 Import 语句
+
+```java
+// 测试相关
+import org.junit.Test;
+import org.junit.runner.RunWith;
+import org.springframework.boot.test.context.SpringBootTest;
+import org.springframework.context.annotation.Import;
+import org.springframework.test.context.jdbc.Sql;
+import org.springframework.test.context.junit4.SpringRunner;
+import org.springframework.transaction.annotation.Transactional;
+
+// 断言相关
+import static org.junit.Assert.*;
+
+// 依赖注入
+import javax.annotation.Resource;
+
+// 集合工具类
+import org.apache.commons.collections4.CollectionUtils;
+
+// 业务相关类（根据实际项目调整包路径）
+import {项目包路径}.repository.mapper.base.{Entity}Mapper;
+import {项目包路径}.repository.mapper.scope.{Config}Mapper;
+import {项目包路径}.repository.pojo.{Entity}DO;
+import {项目包路径}.repository.pojo.{Entity}Param;
+import {项目包路径}.repository.pojo.{Config}DO;
+import {项目包路径}.config.TestApplicationConfig;
+import {项目包路径}.config.TestMybatisConfig;
+import {项目包路径}.domain.{domain}.entity.{Domain}Entity;
+import {项目包路径}.domain.{domain}.enums.{Enum}Type;
+import {项目包路径}.domain.{domain}.repository.{Domain}Repository;
+import {项目包路径}.domain.{domain}.valueobject.{ValueObject}Domain;
+
+// Java基础类
+import java.util.List;
+```
+
+### 3. 依赖注入规范
+
+```java
+@Resource
+private {被测试的Repository接口} {repository变量名};  // 被测试的Repository
+
+@Resource
+private {相关Mapper}Mapper {mapper变量名};  // 用于数据验证的Mapper
+```
+
+### 4. 测试方法命名规范
+
+**格式**: `test{方法名}_{测试场景}_{期望结果}`
+
+**示例**:
+- `testFindById_WhenIdNotExists_ShouldReturnNull`
+- `testFindById_WhenGoodsIdExists83_ShouldReturnCorrectGoodsDomain`
+- `testFindAll_ShouldReturnAllGoods`
+- `testSave_WhenValidData_ShouldReturnSavedEntity`
+- `testUpdate_WhenEntityExists_ShouldUpdateSuccessfully`
+- `testDelete_WhenIdExists_ShouldDeleteSuccessfully`
+
+### 5. 数据验证策略
+
+#### 5.1 数据库比对验证（优先使用）
+
+优先使用数据库比对验证，避免硬编码期望值：
+
+```java
+// 使用参数查询方式
+{Entity}Param param = new {Entity}Param();
+param.createCriteria().and{字段名}EqualTo(value);
+List<{Entity}DO> dos = {mapper}.selectByParam(param);
+{Entity}DO expectedData = dos.get(0);
+
+// 与返回结果比对
+assertEquals("字段描述应该与数据库一致", expectedData.get{字段名}(), result.get{字段名}());
+```
+
+#### 5.2 条件验证逻辑
+
+根据数据库配置进行条件验证：
+
+```java
+// 根据数据库配置进行条件验证
+{Config}DO config = {configMapper}.getBy{Key}(key, env);
+if (config != null) {
+    assertNotNull("当数据库中存在配置时，相关字段不应为空", result.get{字段名}());
+    // 进一步验证配置内容
+} else {
+    System.out.println("数据库中没有找到{key}=" + key + "的配置");
+    // 根据业务逻辑进行相应断言
+}
+```
+
+### 6. 断言规范
+
+#### 6.1 基础断言
+
+```java
+// 非空断言
+assertNotNull("当{条件}时，返回的{对象}不应为空", result);
+
+// 空值断言
+assertNull("当{条件}时，应该返回null", result);
+
+// 相等断言
+assertEquals("字段描述", expected, actual);
+
+// 不相等断言
+assertNotEquals("字段描述", unexpected, actual);
+```
+
+#### 6.2 业务规则断言
+
+```java
+// 布尔值断言
+assertTrue("业务规则描述", result.getIs{字段名}());
+assertFalse("业务规则描述", result.getIs{字段名}());
+
+// 枚举断言
+assertEquals("枚举字段描述", ExpectedEnum.VALUE, result.getEnumField());
+```
+
+#### 6.3 集合断言
+
+```java
+assertNotNull("集合不应为空", result);
+assertFalse("应该返回数据列表", result.isEmpty());
+assertTrue("返回的数据数量应该符合预期", result.size() >= expectedCount);
+
+// 使用 CollectionUtils 进行集合操作验证
+assertTrue("集合应该包含指定元素", CollectionUtils.isNotEmpty(result));
+```
+
+### 7. 测试场景覆盖
+
+#### 7.1 正常场景
+
+- 存在数据的标准查询
+- 有效参数的 CRUD 操作
+- 正常业务流程验证
+- 多条件组合查询
+
+#### 7.2 异常场景
+
+- 不存在数据的查询（应返回 null 或空集合）
+- 无效参数处理（null、空字符串、负数等）
+- 边界值测试（最大值、最小值、临界值）
+- 异常数据格式处理
+
+#### 7.3 业务场景
+
+- 不同业务状态的验证
+- 复杂业务规则的测试
+- 多条件组合查询
+- 分页查询验证
+- 排序功能验证
+
+### 8. 调试和日志
+
+```java
+// 使用 System.out.println 输出调试信息
+System.out.println("数据库中的配置: " + config);
+System.out.println("解析后的结果: " + result);
+System.out.println("未找到{key}=" + key + "的配置");
+
+// 或使用日志框架（如果测试类中注入了 Logger）
+log.debug("测试数据准备完成: {}", testData);
+log.info("执行查询操作: {}", queryParam);
+```
+
+### 9. 测试数据管理
+
+#### 9.1 SQL 脚本规范
+
+- **脚本路径**: `classpath:sql/dml/repo/{测试类名}.sql`
+- **数据覆盖**: 各种业务场景和边界情况
+- **数据独立**: 每个测试用例的数据相互独立
+- **命名规范**: SQL 文件命名与测试类名保持一致
+
+#### 9.2 测试环境
+
+- 使用 H2 内存数据库进行测试
+- 确保 DDL 脚本兼容性
+- 配置正确的数据库连接
+- 使用 `@Transactional` 确保测试数据回滚
+
+#### 9.3 测试数据准备
+
+```java
+// Given - 准备测试数据
+{Entity}Param param = new {Entity}Param();
+param.createCriteria().and{字段名}EqualTo(testValue);
+
+// 或使用测试数据构建器
+{Entity}DO testData = {Entity}DO.builder()
+    .field1(value1)
+    .field2(value2)
+    .build();
+```
+
+### 10. 代码质量要求
+
+#### 10.1 可读性
+
+- 使用有意义的变量名
+- 添加必要的注释说明测试意图
+- 保持测试方法简洁，一个方法测试一个场景
+- 使用 Given-When-Then 结构组织测试代码
+
+#### 10.2 维护性
+
+- 避免硬编码期望值，优先使用数据库比对
+- 使用 `@Transactional` 确保测试数据回滚
+- 所有断言都包含清晰的错误消息
+- 提取公共的测试数据准备逻辑
+
+#### 10.3 完整性
+
+- 确保所有公共方法都有对应测试
+- 覆盖所有分支逻辑
+- 验证关键业务字段和业务规则
+- 测试覆盖率目标：核心 Repository 方法 ≥ 80%
+
+### 11. 测试方法模板
+
+#### 11.1 标准测试模板
+
+```java
+@Test
+public void test{方法名}_{测试场景}_{期望结果}() {
+    // Given - 准备测试数据
+    {参数类型} param = new {参数类型}({参数值});
+    
+    // When - 执行被测试方法
+    {返回类型} result = {repository}.{方法名}(param);
+    
+    // Then - 验证结果
+    assertNotNull("当{条件}时，返回结果不应为空", result);
+    
+    // 数据库比对验证
+    {Entity}DO expectedData = {mapper}.getBy{Key}({key});
+    assertEquals("字段描述", expectedData.get{字段名}(), result.get{字段名}());
+    
+    // 业务规则验证
+    assertTrue("业务规则描述", result.getIs{字段名}());
+}
+```
+
+#### 11.2 查询方法测试模板
+
+```java
+@Test
+public void testFindById_WhenIdExists_ShouldReturnCorrectEntity() {
+    // Given
+    Long testId = 83L;
+    
+    // When
+    {Domain}Entity result = {repository}.findById(new {ValueObject}Domain(testId));
+    
+    // Then
+    assertNotNull("当ID存在时，应该返回实体对象", result);
+    
+    // 数据库比对验证
+    {Entity}Param param = new {Entity}Param();
+    param.createCriteria().andIdEqualTo(testId);
+    List<{Entity}DO> dos = {mapper}.selectByParam(param);
+    assertFalse("数据库中应该存在该ID的数据", dos.isEmpty());
+    {Entity}DO expectedData = dos.get(0);
+    assertEquals("ID应该一致", expectedData.getId(), result.getId());
+}
+```
+
+#### 11.3 保存方法测试模板
+
+```java
+@Test
+public void testSave_WhenValidData_ShouldSaveSuccessfully() {
+    // Given
+    {Domain}Entity entity = new {Domain}Entity();
+    entity.set{Field}(value);
+    
+    // When
+    {Domain}Entity savedEntity = {repository}.save(entity);
+    
+    // Then
+    assertNotNull("保存后应该返回实体对象", savedEntity);
+    assertNotNull("保存后应该有ID", savedEntity.getId());
+    
+    // 验证数据库中的数据
+    {Entity}Param param = new {Entity}Param();
+    param.createCriteria().andIdEqualTo(savedEntity.getId());
+    List<{Entity}DO> dos = {mapper}.selectByParam(param);
+    assertFalse("数据库中应该存在保存的数据", dos.isEmpty());
+}
+```
+
+#### 11.4 异常场景测试模板
+
+```java
+@Test
+public void testFindById_WhenIdNotExists_ShouldReturnNull() {
+    // Given
+    Long nonExistentId = 99999L;
+    
+    // When
+    {Domain}Entity result = {repository}.findById(new {ValueObject}Domain(nonExistentId));
+    
+    // Then
+    assertNull("当ID不存在时，应该返回null", result);
+}
+```
+
+### 12. 输出要求
+
+1. **完整的测试类**: 包含所有必要的注解、导入和配置
+2. **全面的测试方法**: 覆盖所有场景的测试用例
+3. **规范的断言**: 使用数据库比对验证，包含清晰的错误消息
+4. **调试信息**: 必要的日志输出用于问题定位
+5. **测试数据脚本**: 提供对应的 SQL 测试数据脚本建议
+
+### 13. 注意事项
+
+1. 严格遵循命名规范和代码格式
+2. 优先使用数据库比对而非硬编码验证
+3. 确保测试独立性，避免测试间相互依赖
+4. 添加充分的注释说明测试意图和业务逻辑
+5. 保持代码简洁，避免过度复杂的测试逻辑
+6. 使用 `@Transactional` 确保每个测试后数据回滚
+7. 测试方法应该快速执行，避免长时间运行的测试
+8. 关键业务逻辑必须有对应的测试用例
+
+### 14. 与现有规范的协同
+
+- **通用测试策略**: 参考 `testing.mdc` 了解测试金字塔、AAA 模式等通用测试原则
+- **Java 编码规范**: 参考 `java.mdc` 了解 Java 编码规范、Lombok 使用等
+- **代码质量标准**: 参考 `quality.mdc` 了解代码质量要求和自检清单
+- **安全规范**: 参考 `security.mdc` 了解测试中的安全考虑
+
+---
+
+**重要**: 
+- 本规约专注于 Spring Boot Repository 层的单元测试编写
+- 与 `testing.mdc`（通用测试策略）和 `java.mdc`（Java 编码规范）协同使用
+- 冲突时以本文件中"Repository 层测试细则"优先
+- 建议每季度审查一次，确保规约与技术栈同步更新

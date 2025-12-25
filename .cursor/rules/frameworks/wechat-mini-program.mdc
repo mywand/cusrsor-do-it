@@ -1,0 +1,979 @@
+---
+description: 微信小程序开发规范（结合前端通用与Vue最佳实践）
+globs: ["**/*.wxml", "**/*.wxss", "**/*.js", "**/*.json", "**/app.json", "**/project.config.json", "**/sitemap.json"]
+alwaysApply: false
+---
+最近更新: 2025-09-18
+
+# 微信小程序开发规范
+
+## 1. 技术栈与项目基础
+- **平台**：微信小程序（基础库 2.32.0+）
+- **语言**：TypeScript 严格模式（`strict: true`、`noImplicitAny: true`）
+- **样式**：Less/Sass + 设计系统 Token
+- **状态管理**：轻量 store + 组合式逻辑（借鉴 Vue Composition API 思想）
+- **UI库**：Vant Weapp + 自定义原子组件
+- **构建**：微信开发者工具 + 自定义构建脚本
+- **数据请求**：统一封装 + 错误处理 + 重试机制（参考 TanStack Query 模式）
+
+## 2. 目录结构（优化版）
+```
+miniprogram/
+├── app.json                    # 小程序全局配置
+├── app.less                    # 全局样式 + Token 导入
+├── app.ts                      # 小程序入口 + 全局状态初始化
+├── sitemap.json                # 搜索索引配置
+├── pages/                      # 页面目录（路由页面）
+│   ├── home/                   # 首页
+│   └── profile/                # 个人中心
+├── components/                 # 可复用基础组件（无业务逻辑）
+│   ├── base/                   # 原子组件（Button/Input/Card）
+│   └── business/               # 业务组件（UserCard/OrderItem）
+├── features/                   # 业务特性模块（聚合页面/组件/逻辑）
+│   ├── auth/                   # 认证模块
+│   ├── order/                  # 订单模块
+│   └── user/                   # 用户模块
+├── composables/                # 复用逻辑（类似 Vue useXXX）
+│   ├── useRequest.ts           # 请求封装
+│   ├── useAuth.ts              # 认证逻辑
+│   └── useStorage.ts           # 存储管理
+├── stores/                     # 状态管理模块
+│   ├── auth.ts                 # 认证状态
+│   ├── user.ts                 # 用户状态
+│   └── index.ts                # 状态汇总
+├── api/                        # API 接口封装
+│   ├── types.ts                # API 类型定义
+│   ├── client.ts               # 统一请求客户端
+│   ├── auth.ts                 # 认证相关接口
+│   └── user.ts                 # 用户相关接口
+├── utils/                      # 纯函数工具（无框架耦合）
+│   ├── format.ts               # 格式化工具
+│   ├── validate.ts             # 校验工具
+│   └── constants.ts            # 常量定义
+├── tokens/                     # 设计系统 Token
+│   ├── colors.ts               # 颜色定义
+│   ├── spacing.ts              # 间距定义
+│   ├── typography.ts           # 字体定义
+│   └── index.ts                # Token 汇总
+├── styles/                     # 全局样式
+│   ├── variables.less          # Less 变量
+│   ├── mixins.less             # 样式混入
+│   └── reset.less              # 样式重置
+├── assets/                     # 静态资源
+│   ├── images/                 # 图片资源
+│   └── icons/                  # 图标资源
+├── types/                      # 全局类型定义
+│   ├── global.d.ts             # 全局类型扩展
+│   └── api.d.ts                # API 响应类型
+└── custom-tab-bar/             # 自定义 TabBar
+```
+
+## 3. 命名约定（继承前端规范）
+- **文件/目录**：kebab-case（`user-profile.ts`、`order-list/`）
+- **变量/函数**：camelCase（`getUserInfo`、`handleSubmit`）
+- **常量**：UPPER_SNAKE_CASE（`API_BASE_URL`、`MAX_RETRY_COUNT`）
+- **接口/类型**：PascalCase（`UserInfo`、`ApiResponse`）
+- **CSS类名**：kebab-case + BEM（`.user-card__title--active`）
+- **组件名**：PascalCase 在代码中，kebab-case 在文件名
+
+## 4. TypeScript 规范（严格模式）
+### 基础配置
+```typescript
+// tsconfig.json
+{
+  "compilerOptions": {
+    "strict": true,
+    "noImplicitAny": true,
+    "exactOptionalPropertyTypes": true,
+    "strictNullChecks": true,
+    "module": "CommonJS",
+    "target": "ES2020",
+    "allowJs": false,
+    "allowSyntheticDefaultImports": true,
+    "esModuleInterop": true,
+    "lib": ["ES2020"],
+    "typeRoots": ["./typings", "./node_modules/@types"]
+  },
+  "include": ["./**/*.ts"],
+  "exclude": ["node_modules", "**/*.test.ts"]
+}
+```
+
+### 类型设计原则
+- **禁用 any**：特殊情况需注释说明理由
+- **interface vs type**：稳定结构用 interface，复杂联合用 type
+- **API 类型分离**：生成型（如 OpenAPI）与手写类型分开存放
+- **运行时校验**：外部数据使用 schema 校验（可选 zod）
+
+### 小程序特定类型
+```typescript
+// types/global.d.ts
+declare global {
+  namespace WechatMiniprogram {
+    interface Page {
+      route?: string;
+    }
+  }
+}
+
+// types/api.d.ts
+interface ApiResponse<T = any> {
+  code: number;
+  message: string;
+  data: T;
+  traceId?: string;
+}
+
+interface PaginationParams {
+  page: number;
+  pageSize: number;
+}
+
+interface PaginationResponse<T> {
+  list: T[];
+  total: number;
+  page: number;
+  pageSize: number;
+}
+```
+
+## 5. 组件设计（借鉴 Vue 组件原则）
+### 组件分类
+- **Base 组件**：原子 UI，无业务逻辑（Button、Input、Card）
+- **Business 组件**：业务相关，可复用（UserCard、OrderItem）
+- **Feature 组件**：特定功能，聚合多个组件（UserProfile、OrderList）
+- **Page 组件**：页面级，路由承载
+
+### 组件设计原则
+```typescript
+// components/base/custom-button/index.ts
+interface Properties {
+  type: 'primary' | 'secondary' | 'danger';
+  size: 'small' | 'medium' | 'large';
+  disabled?: boolean;
+  loading?: boolean;
+  block?: boolean;
+}
+
+interface Data {
+  internalLoading: boolean;
+}
+
+Component<Data, Properties>({
+  options: {
+    multipleSlots: true,
+    styleIsolation: 'isolated',
+    pureDataPattern: /^_/ // 优化性能
+  },
+
+  externalClasses: ['custom-class'],
+
+  properties: {
+    type: { type: String, value: 'primary' },
+    size: { type: String, value: 'medium' },
+    disabled: { type: Boolean, value: false },
+    loading: { type: Boolean, value: false },
+    block: { type: Boolean, value: false }
+  },
+
+  data: {
+    internalLoading: false
+  },
+
+  methods: {
+    handleTap(e: WechatMiniprogram.TouchEvent) {
+      if (this.data.disabled || this.data.loading) return;
+      
+      this.triggerEvent('tap', { 
+        detail: e.detail 
+      }, { 
+        bubbles: true, 
+        composed: true 
+      });
+    },
+
+    // 暴露给父组件的方法
+    setLoading(loading: boolean) {
+      this.setData({ internalLoading: loading });
+    }
+  },
+
+  lifetimes: {
+    attached() {
+      // 组件初始化
+    },
+    detached() {
+      // 清理资源
+    }
+  }
+});
+```
+
+## 6. 状态管理（轻量化 + 组合式）
+### 全局状态设计
+```typescript
+// stores/auth.ts
+interface AuthState {
+  isLogin: boolean;
+  userInfo: UserInfo | null;
+  token: string | null;
+}
+
+class AuthStore {
+  private state: AuthState = {
+    isLogin: false,
+    userInfo: null,
+    token: null
+  };
+
+  private listeners: Set<() => void> = new Set();
+
+  // 状态访问器
+  get isLogin() { return this.state.isLogin; }
+  get userInfo() { return this.state.userInfo; }
+  get token() { return this.state.token; }
+
+  // 状态更新
+  setUserInfo(userInfo: UserInfo, token: string) {
+    this.state.userInfo = userInfo;
+    this.state.token = token;
+    this.state.isLogin = true;
+    this.persist();
+    this.notify();
+  }
+
+  logout() {
+    this.state = { isLogin: false, userInfo: null, token: null };
+    this.clearStorage();
+    this.notify();
+  }
+
+  // 订阅机制（类似 Vue 响应式）
+  subscribe(listener: () => void) {
+    this.listeners.add(listener);
+    return () => this.listeners.delete(listener);
+  }
+
+  private notify() {
+    this.listeners.forEach(listener => listener());
+  }
+
+  private persist() {
+    wx.setStorageSync('auth_state', {
+      userInfo: this.state.userInfo,
+      token: this.state.token
+    });
+  }
+
+  private clearStorage() {
+    wx.removeStorageSync('auth_state');
+  }
+
+  // 初始化
+  init() {
+    try {
+      const saved = wx.getStorageSync('auth_state');
+      if (saved?.token) {
+        this.state.userInfo = saved.userInfo;
+        this.state.token = saved.token;
+        this.state.isLogin = true;
+      }
+    } catch (error) {
+      console.warn('Auth state init failed:', error);
+    }
+  }
+}
+
+export const authStore = new AuthStore();
+```
+
+### 组合式逻辑（Composables）
+```typescript
+// composables/useRequest.ts
+interface UseRequestOptions {
+  immediate?: boolean;
+  onSuccess?: (data: any) => void;
+  onError?: (error: Error) => void;
+}
+
+export function useRequest<T>(
+  requestFn: () => Promise<T>,
+  options: UseRequestOptions = {}
+) {
+  const { immediate = false, onSuccess, onError } = options;
+  
+  let loading = false;
+  let data: T | null = null;
+  let error: Error | null = null;
+
+  const execute = async () => {
+    loading = true;
+    error = null;
+    
+    try {
+      data = await requestFn();
+      onSuccess?.(data);
+    } catch (err) {
+      error = err as Error;
+      onError?.(error);
+    } finally {
+      loading = false;
+    }
+  };
+
+  if (immediate) {
+    execute();
+  }
+
+  return {
+    loading: () => loading,
+    data: () => data,
+    error: () => error,
+    execute,
+    refresh: execute
+  };
+}
+```
+
+## 7. API 调用与错误处理（统一封装）
+### 请求客户端
+```typescript
+// api/client.ts
+interface RequestConfig {
+  url: string;
+  method: 'GET' | 'POST' | 'PUT' | 'DELETE';
+  data?: any;
+  header?: Record<string, string>;
+  timeout?: number;
+  retries?: number;
+}
+
+interface ApiError {
+  code: number;
+  message: string;
+  traceId?: string;
+}
+
+class ApiClient {
+  private baseURL = '';
+  private defaultTimeout = 10000;
+  private maxRetries = 3;
+
+  constructor(baseURL: string) {
+    this.baseURL = baseURL;
+  }
+
+  async request<T>(config: RequestConfig): Promise<T> {
+    const { retries = this.maxRetries } = config;
+    
+    for (let attempt = 0; attempt <= retries; attempt++) {
+      try {
+        return await this.executeRequest<T>(config);
+      } catch (error) {
+        if (attempt === retries || !this.shouldRetry(error)) {
+          throw error;
+        }
+        // 指数退避
+        await this.delay(Math.pow(2, attempt) * 1000);
+      }
+    }
+    throw new Error('Max retries exceeded');
+  }
+
+  private executeRequest<T>(config: RequestConfig): Promise<T> {
+    return new Promise((resolve, reject) => {
+      wx.request({
+        url: `${this.baseURL}${config.url}`,
+        method: config.method,
+        data: config.data,
+        timeout: config.timeout || this.defaultTimeout,
+        header: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${authStore.token || ''}`,
+          'X-Request-ID': this.generateRequestId(),
+          ...config.header
+        },
+        success: (res) => {
+          if (res.statusCode >= 200 && res.statusCode < 300) {
+            const response = res.data as ApiResponse<T>;
+            if (response.code === 200) {
+              resolve(response.data);
+            } else {
+              reject(new ApiError(response.code, response.message, response.traceId));
+            }
+          } else {
+            reject(new ApiError(res.statusCode, `HTTP ${res.statusCode}`));
+          }
+        },
+        fail: (error) => {
+          reject(new ApiError(-1, error.errMsg || '网络错误'));
+        }
+      });
+    });
+  }
+
+  private shouldRetry(error: any): boolean {
+    // 仅重试网络错误和5xx错误
+    return error.code === -1 || (error.code >= 500 && error.code < 600);
+  }
+
+  private delay(ms: number): Promise<void> {
+    return new Promise(resolve => setTimeout(resolve, ms));
+  }
+
+  private generateRequestId(): string {
+    return `${Date.now()}-${Math.random().toString(36).substr(2, 9)}`;
+  }
+}
+
+export const apiClient = new ApiClient(API_BASE_URL);
+```
+
+### 统一错误处理
+```typescript
+// utils/error-handler.ts
+export class ApiError extends Error {
+  constructor(
+    public code: number,
+    message: string,
+    public traceId?: string
+  ) {
+    super(message);
+    this.name = 'ApiError';
+  }
+}
+
+export function handleApiError(error: ApiError | Error) {
+  if (error instanceof ApiError) {
+    switch (error.code) {
+      case 401:
+        // 未授权，跳转登录
+        authStore.logout();
+        wx.navigateTo({ url: '/pages/login/login' });
+        break;
+      case 403:
+        wx.showToast({ title: '权限不足', icon: 'error' });
+        break;
+      case 404:
+        wx.showToast({ title: '资源不存在', icon: 'error' });
+        break;
+      case 429:
+        wx.showToast({ title: '请求过于频繁', icon: 'error' });
+        break;
+      default:
+        wx.showToast({ 
+          title: error.message || '请求失败', 
+          icon: 'error' 
+        });
+    }
+  } else {
+    wx.showToast({ title: '网络错误', icon: 'error' });
+  }
+
+  // 错误上报
+  console.error('API Error:', error);
+  // 可接入 Sentry 等错误监控
+}
+```
+
+## 8. 设计系统与样式（Token 化）
+### Token 设计
+```typescript
+// tokens/index.ts
+export const DESIGN_TOKENS = {
+  colors: {
+    primary: '#1890ff',
+    success: '#52c41a', 
+    warning: '#faad14',
+    error: '#f5222d',
+    text: {
+      primary: '#333333',
+      secondary: '#666666',
+      disabled: '#cccccc'
+    },
+    bg: {
+      default: '#ffffff',
+      secondary: '#f8f9fa',
+      disabled: '#f5f5f5'
+    }
+  },
+  spacing: {
+    xs: '8rpx',
+    sm: '16rpx', 
+    md: '24rpx',
+    lg: '32rpx',
+    xl: '48rpx'
+  },
+  fontSize: {
+    xs: '20rpx',
+    sm: '24rpx',
+    base: '28rpx',
+    lg: '32rpx',
+    xl: '36rpx'
+  },
+  borderRadius: {
+    sm: '4rpx',
+    base: '8rpx',
+    lg: '12rpx',
+    round: '50%'
+  }
+} as const;
+```
+
+### Less 变量映射
+```less
+// styles/variables.less
+@import '../tokens/index.ts';
+
+// 颜色变量
+@primary-color: #1890ff;
+@success-color: #52c41a;
+@warning-color: #faad14;
+@error-color: #f5222d;
+
+// 间距变量
+@spacing-xs: 8rpx;
+@spacing-sm: 16rpx;
+@spacing-md: 24rpx;
+@spacing-lg: 32rpx;
+
+// 字体变量
+@font-size-sm: 24rpx;
+@font-size-base: 28rpx;
+@font-size-lg: 32rpx;
+
+// 组件样式混入
+.button-base() {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  padding: @spacing-sm @spacing-md;
+  border-radius: @spacing-sm;
+  font-size: @font-size-base;
+  transition: all 0.3s;
+
+  &.disabled {
+    opacity: 0.6;
+    pointer-events: none;
+  }
+}
+```
+
+## 9. 页面与组件开发
+### 页面结构（标准化）
+```typescript
+// pages/user-profile/user-profile.ts
+interface PageData {
+  userInfo: UserInfo | null;
+  loading: boolean;
+  refreshing: boolean;
+}
+
+interface PageOptions {
+  userId?: string;
+}
+
+Page<PageData, PageOptions>({
+  data: {
+    userInfo: null,
+    loading: false,
+    refreshing: false
+  },
+
+  // 生命周期
+  onLoad(options) {
+    const { userId } = options;
+    if (userId) {
+      this.loadUserInfo(userId);
+    }
+  },
+
+  onShow() {
+    // 页面显示时刷新数据
+    if (this.data.userInfo) {
+      this.refreshUserInfo();
+    }
+  },
+
+  onPullDownRefresh() {
+    this.refreshUserInfo();
+  },
+
+  onReachBottom() {
+    // 加载更多逻辑
+  },
+
+  // 数据加载
+  async loadUserInfo(userId: string) {
+    this.setData({ loading: true });
+    
+    try {
+      const userInfo = await userApi.getUserInfo(userId);
+      this.setData({ userInfo });
+    } catch (error) {
+      handleApiError(error);
+    } finally {
+      this.setData({ loading: false });
+    }
+  },
+
+  async refreshUserInfo() {
+    if (!this.data.userInfo?.id) return;
+    
+    this.setData({ refreshing: true });
+    
+    try {
+      const userInfo = await userApi.getUserInfo(this.data.userInfo.id);
+      this.setData({ userInfo });
+    } catch (error) {
+      handleApiError(error);
+    } finally {
+      this.setData({ refreshing: false });
+      wx.stopPullDownRefresh();
+    }
+  },
+
+  // 事件处理
+  onEditTap() {
+    const { userInfo } = this.data;
+    if (!userInfo) return;
+    
+    wx.navigateTo({ 
+      url: `/pages/edit-profile/edit-profile?userId=${userInfo.id}` 
+    });
+  },
+
+  onShareAppMessage() {
+    return {
+      title: `${this.data.userInfo?.name}的个人资料`,
+      path: `/pages/user-profile/user-profile?userId=${this.data.userInfo?.id}`
+    };
+  }
+});
+```
+
+## 10. 性能优化（小程序特有）
+### 包体积优化
+```json
+// app.json - 分包配置
+{
+  "pages": [
+    "pages/home/home",
+    "pages/profile/profile"
+  ],
+  "subPackages": [
+    {
+      "root": "packages/mall",
+      "name": "mall",
+      "pages": [
+        "pages/product-list/product-list",
+        "pages/product-detail/product-detail"
+      ]
+    },
+    {
+      "root": "packages/order", 
+      "name": "order",
+      "pages": [
+        "pages/order-list/order-list",
+        "pages/order-detail/order-detail"
+      ]
+    }
+  ],
+  "preloadRule": {
+    "pages/home/home": {
+      "network": "wifi",
+      "packages": ["mall"]
+    }
+  }
+}
+```
+
+### 渲染性能优化
+- **数据优化**：使用 `pureDataPattern` 避免不必要的 setData
+- **列表优化**：长列表使用虚拟化或分页加载
+- **图片优化**：懒加载 + WebP 格式 + 合适尺寸
+- **代码分割**：按功能模块分包，减少主包体积
+
+### 内存管理
+```typescript
+// composables/useCleanup.ts
+export function useCleanup() {
+  const timers: number[] = [];
+  const intervals: number[] = [];
+
+  const addTimer = (timer: number) => timers.push(timer);
+  const addInterval = (interval: number) => intervals.push(interval);
+
+  const cleanup = () => {
+    timers.forEach(timer => clearTimeout(timer));
+    intervals.forEach(interval => clearInterval(interval));
+    timers.length = 0;
+    intervals.length = 0;
+  };
+
+  return { addTimer, addInterval, cleanup };
+}
+```
+
+## 11. 安全规范（小程序特有）
+### 数据安全
+```typescript
+// utils/security.ts
+export function sanitizeInput(input: string): string {
+  return input
+    .replace(/<script\b[^<]*(?:(?!<\/script>)<[^<]*)*<\/script>/gi, '')
+    .replace(/javascript:/gi, '')
+    .replace(/on\w+\s*=/gi, '');
+}
+
+export function maskSensitiveData(data: any): any {
+  if (typeof data === 'string') {
+    // 手机号脱敏
+    if (/^1[3-9]\d{9}$/.test(data)) {
+      return data.replace(/(\d{3})\d{4}(\d{4})/, '$1****$2');
+    }
+    // 身份证脱敏
+    if (/^\d{15}$|^\d{18}$/.test(data)) {
+      return data.replace(/(\d{6})\d{8}(\d{4})/, '$1********$2');
+    }
+  }
+  return data;
+}
+```
+
+### 网络安全
+- **HTTPS 强制**：所有 API 请求使用 HTTPS
+- **请求签名**：关键接口使用签名验证
+- **Token 管理**：自动刷新 + 安全存储
+- **防重放**：关键操作使用 nonce + timestamp
+
+## 12. 测试策略（适配小程序）
+### 单元测试
+```typescript
+// __tests__/utils/format.test.ts
+import { formatDate, formatPrice } from '../../utils/format';
+
+describe('Format Utils', () => {
+  test('should format date correctly', () => {
+    const timestamp = 1640995200000;
+    expect(formatDate(timestamp)).toBe('2022-01-01');
+  });
+
+  test('should format price with currency', () => {
+    expect(formatPrice(1234.56)).toBe('¥1,234.56');
+    expect(formatPrice(0)).toBe('免费');
+  });
+});
+```
+
+### 组件测试（模拟环境）
+```typescript
+// __tests__/components/custom-button.test.ts
+import { createComponent } from '../test-utils';
+
+describe('CustomButton Component', () => {
+  test('should emit tap event when clicked', async () => {
+    const component = createComponent('custom-button', {
+      type: 'primary',
+      disabled: false
+    });
+
+    const tapSpy = jest.fn();
+    component.addEventListener('tap', tapSpy);
+    
+    await component.tap();
+    
+    expect(tapSpy).toHaveBeenCalled();
+  });
+
+  test('should not emit tap when disabled', async () => {
+    const component = createComponent('custom-button', {
+      disabled: true
+    });
+
+    const tapSpy = jest.fn();
+    component.addEventListener('tap', tapSpy);
+    
+    await component.tap();
+    
+    expect(tapSpy).not.toHaveBeenCalled();
+  });
+});
+```
+
+### 真机测试清单
+- [ ] 不同机型适配（iPhone/Android，不同屏幕尺寸）
+- [ ] 网络环境测试（WiFi/4G/弱网）
+- [ ] 性能测试（启动时间 < 3s，页面切换 < 500ms）
+- [ ] 内存测试（长时间使用无内存泄漏）
+
+## 13. 发布与部署
+### 版本管理
+```json
+// app.json
+{
+  "version": "1.2.0",
+  "versionName": "功能优化版本", 
+  "debug": false,
+  "lazyCodeLoading": "requiredComponents"
+}
+```
+
+### 发布前检查清单
+- [ ] **代码质量**：ESLint 检查通过，无 TypeScript 错误
+- [ ] **性能指标**：启动时间 < 3s，主包体积 < 2MB
+- [ ] **功能测试**：核心功能在真机测试通过
+- [ ] **兼容性**：支持微信版本覆盖 95% 用户
+- [ ] **隐私合规**：隐私政策完善，敏感权限申请合理
+- [ ] **安全检查**：无硬编码密钥，API 调用使用 HTTPS
+
+### CI/CD 流程
+```yaml
+# .github/workflows/miniprogram.yml
+name: 小程序 CI/CD
+on: [push, pull_request]
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v3
+      - uses: actions/setup-node@v3
+        with:
+          node-version: '18'
+      - run: npm ci
+      - run: npm run lint
+      - run: npm run type-check  
+      - run: npm run test
+      - run: npm run build
+
+  deploy:
+    if: github.ref == 'refs/heads/main'
+    needs: test
+    runs-on: ubuntu-latest
+    steps:
+      - run: npm run upload # 上传到微信后台
+```
+
+## 14. 监控与可观测（小程序特有）
+### 性能监控
+```typescript
+// utils/performance.ts
+export class PerformanceMonitor {
+  static reportPageLoad(pageName: string, loadTime: number) {
+    console.log(`Page ${pageName} loaded in ${loadTime}ms`);
+    
+    // 上报到监控系统
+    wx.reportAnalytics('page_load_time', {
+      page: pageName,
+      duration: loadTime
+    });
+  }
+
+  static reportApiCall(api: string, duration: number, success: boolean) {
+    wx.reportAnalytics('api_call', {
+      api,
+      duration,
+      success: success ? 1 : 0
+    });
+  }
+
+  static reportError(error: Error, context: string) {
+    console.error(`Error in ${context}:`, error);
+    
+    wx.reportAnalytics('error', {
+      context,
+      message: error.message,
+      stack: error.stack?.substring(0, 1000) // 限制长度
+    });
+  }
+}
+```
+
+### 用户行为埋点
+```typescript
+// utils/analytics.ts
+interface TrackEvent {
+  event: string;
+  properties?: Record<string, any>;
+}
+
+export function track(event: string, properties: Record<string, any> = {}) {
+  // 过滤敏感信息
+  const safeProperties = Object.entries(properties).reduce((acc, [key, value]) => {
+    if (!['password', 'token', 'phone', 'idCard'].includes(key)) {
+      acc[key] = value;
+    }
+    return acc;
+  }, {} as Record<string, any>);
+
+  wx.reportAnalytics(event, {
+    ...safeProperties,
+    timestamp: Date.now(),
+    page: getCurrentPages().pop()?.route || 'unknown'
+  });
+}
+
+// 使用示例
+track('button_click', { button_type: 'submit', form_name: 'login' });
+track('page_view', { page_name: 'product_detail', product_id: '123' });
+```
+
+## 15. 自查清单
+- [ ] **结构规范**：目录结构符合规范，命名一致（kebab-case）
+- [ ] **类型完整**：TypeScript 严格模式，无 any 类型
+- [ ] **组件设计**：复用性好，职责单一，Props 类型明确
+- [ ] **状态管理**：轻量化设计，避免过度抽象
+- [ ] **API 封装**：统一客户端，错误处理完善，支持重试
+- [ ] **样式规范**：使用 Token，响应式适配，BEM 命名
+- [ ] **性能优化**：分包合理，图片优化，内存管理
+- [ ] **安全措施**：敏感数据保护，输入校验，HTTPS 传输
+- [ ] **测试覆盖**：单元测试 + 真机测试，关键功能覆盖
+- [ ] **发布就绪**：检查清单通过，版本管理规范
+
+## 16. 与其他规范关系
+- **基础规范**：`coding-standards.mdc`（命名、函数设计、错误处理）
+- **前端通用**：`frontend.mdc`（目录结构、Token 系统、性能优化）
+- **Vue 实践**：`vue.mdc`（组合式逻辑、状态管理、TypeScript 约定）
+- **测试策略**：`testing.mdc`（单元测试、集成测试、命名规范）
+- **安全基线**：`security.mdc`（输入校验、敏感数据、传输安全）
+- **可观测性**：`observability.mdc`（日志结构、指标采集、错误上报）
+
+## 17. 小程序特有最佳实践
+### 生命周期管理
+- **页面生命周期**：合理使用 onLoad/onShow/onHide，避免重复初始化
+- **组件生命周期**：在 detached 中清理定时器和事件监听
+- **应用生命周期**：在 onLaunch 中初始化全局状态和配置
+
+### 平台能力利用
+- **原生组件**：合理使用 map、video、camera 等原生组件
+- **开放能力**：登录、支付、分享等能力的标准化封装
+- **性能工具**：使用微信开发者工具的性能面板和体验评分
+
+### 兼容性处理
+```typescript
+// utils/compatibility.ts
+export function checkApiSupport(api: string): boolean {
+  return wx.canIUse(api);
+}
+
+export function safeApiCall<T>(
+  api: () => T,
+  fallback: () => T,
+  apiName: string
+): T {
+  if (checkApiSupport(apiName)) {
+    return api();
+  } else {
+    console.warn(`API ${apiName} not supported, using fallback`);
+    return fallback();
+  }
+}
+```
+
+## 18. 模板示例
+参考：`docs/templates/miniprogram/`（配置文件、组件示例、工具函数）
+
+---
+
+> 本规范结合了前端通用规范与 Vue 最佳实践，专门适配微信小程序平台特性。适用于中大型小程序项目，小型项目可适当简化。

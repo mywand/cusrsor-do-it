@@ -1,0 +1,240 @@
+---
+description: Frontend engineering baseline (前端工程规范骨架)
+globs: ["**/*.js", "**/*.jsx", "**/*.ts", "**/*.tsx", "**/*.vue", "**/*.html", "**/*.css", "**/*.scss", "**/*.less", "**/package.json", "**/tsconfig.json", "**/vite.config.*", "**/webpack.config.*"]
+alwaysApply: false
+---
+最近更新: 2025-09-18
+# Frontend Engineering Baseline
+
+## 1. 范围与定位
+- 本文件提供框架无关的前端工程基线（目录、质量、可观测、部署等）。
+- 具体框架专项规范：Vue → `vue.mdc`（本仓库提供）；React / Svelte 可另行补充。
+
+## 2. 目录结构（通用示例）
+```
+src/
+  main.ts          # 入口
+  app/             # 应用入口/根组件（按框架）
+  router/          # 路由定义与守卫（按框架）
+  pages/           # 路由页面 (视图容器)
+  components/      # 可复用基础组件（无业务）
+  features/        # 业务特性模块（聚合页面/组件/逻辑）
+  state/           # 状态模块（Pinia/Redux/Zustand 等）
+  composables/     # 复用逻辑（hooks/useXXX）
+  api/             # API / SDK / 网关调用封装
+  directives/      # 自定义指令
+  plugins/         # Vue / 第三方插件注册
+  tokens/          # 设计系统 Token（JSON / TS / CSS Vars）
+  styles/          # 全局样式入口 & 预处理（Tailwind / SCSS / PostCSS）
+  assets/          # 静态资源 (图标/字体/图片)
+  utils/           # 纯函数工具，不含框架耦合
+  tests/           # 测试配置或全局 setup
+```
+可选：`env.d.ts` (类型 shim)、`mocks/` (MSW 本地 API Mock)、`prototypes/` (实验性验证)。
+Vue 专属实践：详见 `vue.mdc`（TypeScript/状态/接口错误处理/设计系统 Token 等）。
+
+## 3. 状态管理原则（通用）
+- 优先局部：先本地组件 / composable，后 Pinia store，最后跨域全局单例。
+- Store 颗粒度：按业务垂直切分（auth/user/order），禁止“core/global”巨无霸。
+- 远程数据：优先 TanStack Query（失效策略、缓存键、重试、并发去重）。
+- Store 中避免直接异步副作用：放入 action 或 composable；保持可测试性。
+- 仅当多个组件需要订阅同一响应式源且生命周期独立时引入 store。
+- 避免“缓存即状态”混乱：服务端数据缓存交 Query；本地持久偏配置信息交 store。
+
+## 4. 组件/视图设计（通用）
+- 分类：Base（原子 UI，无业务） / Presentational（布局组合） / Feature（绑定具体业务） / Page（路由承载）。
+- Props 精简 & 明确类型；禁止传递整块 store 或巨大对象（用解构 + 明确字段）。
+- 交互拓展：优先使用 slots / scoped slots；跨层级依赖用 provide/inject 或 composable 而非深层 prop drilling。
+- 避免多布尔 props 组合爆炸：改用枚举 `variant` / `mode`。
+- 复用逻辑抽取 composable（`useXxx`）；UI + 逻辑分离（.vue 内轻逻辑）。
+- 第三方组件二次封装：隔离设计系统 Token / 主题适配，避免全局直接耦合。
+- 提供稳定测试选择器：`data-test="component-name"`。
+
+## 5. TypeScript 规范（通用）
+- 禁止 `any`（例外需 `// eslint-disable-next-line @typescript-eslint/no-explicit-any` + 原因）。
+- interface vs type：稳定结构接口；条件/联合/映射优先 type。
+- 将 API DTO 放在 `api/types.ts` 或分组；生成型 (OpenAPI) 代码与手写类型分隔。
+- 区分 Domain Model vs View Model：转换层明确命名（`mapUserDtoToModel`）。
+- 适度使用 `defineProps`, `defineEmits` 辅助推断；复杂组件抽出 `Props` 类型单独导出。
+- 避免滥用 `as` 断言；优先类型收窄（类型守卫、判空）。
+- 运行时校验（Zod）补充 TS 静态不可信输入。
+
+## 6. API 调用与错误处理（通用）
+- 统一封装 axios/fetch client：超时、取消（AbortController）、并发去重、重试（幂等 GET）。
+- 错误分类：网络 / 超时 / 业务校验 / 权限 / 客户端（解析/状态）/ 不可恢复。
+- 错误对象标准结构：`{ code, message, traceId?, detail? }`。
+- UI 通知抽象：全局 toast 服务；避免组件内重复实现。
+- TanStack Query：client 层抛业务语义错误；Query 层再做分类和回退 UI（error boundary）。
+- 表单错误：字段级联动消息 + 聚合顶部提示。
+- 统一上报：Sentry + 自带 tag（feature, endpoint, status）。
+
+## 7. UI/UX 与设计系统（通用）
+- 颜色/间距/字号统一 Token 化（CSS 变量 / JSON Schema 驱动）。
+- 通过 Storybook 展示 & 可视回归（Chromatic）。
+- 标准状态：加载 / 空 / 错误 / 骨架屏；必须内置 ARIA 语义。
+- Motion：过渡时长与缓动曲线 Token 化，避免随意数值。
+
+### 7.x 设计系统 Token 组织与命名约定（通用）
+
+目标：可演进（多主题 / 暗色）、可发现（层级语义）、可验证（lint/schema）、可消费（多运行时：CSS / TS / 原子类）。
+
+1. Token 分类层次
+   - 原子（Raw / 基础）：直接映射物理值，例如颜色色板、字号、行高、间距步进。
+   - 语义（Semantic）：表达用途（`color-bg-surface` / `color-text-danger`），引用原子层。
+   - 组件级（Component）：特定组件语境（`btn-primary-bg`, `card-shadow`），引用语义层或原子层。
+   - 主题（Theme Variant）：不同模式（light/dark/brand-x）重映射语义指向。
+
+2. 命名模式（kebab-case）
+   - 原子：`color-{palette}-{scale}` → `color-blue-500`
+   - 语义：`color-text-primary`, `color-bg-elevated`, `space-stack-sm`
+   - 组件：`button-primary-bg`, `button-primary-bg-hover`, `modal-backdrop-color`
+   - 尺寸：`size-radius-sm`, `size-radius-md`
+   - 排版：`font-size-sm`, `line-height-tight`
+
+3. 目录组织示例
+```
+tokens/
+  foundations/
+    colors.json         # 原子色板
+    spacing.json        # 间距步进
+    typography.json     # 字体/字号/行高
+    motion.json         # 动画时长/曲线
+    radius.json         # 圆角
+    shadow.json         # 阴影
+  semantic/
+    light.json          # 语义映射（亮）
+    dark.json           # 语义映射（暗）
+  components/
+    button.json
+    card.json
+  index.ts             # 汇总导出（构建到 CSS Vars）
+```
+
+4. CSS 变量生成策略
+   - 构建脚本（例如 Style Dictionary / 自研）生成：`--ds-{group}-{name}`。
+   - 主题作用域：`:root` (light) + `[data-theme="dark"]` (dark)，仅覆盖语义层变量。
+   - 示例：
+```css
+:root {
+  --ds-color-blue-500: #2563eb;
+  --ds-color-text-primary: var(--ds-color-blue-500);
+  --ds-space-stack-sm: 4px;
+}
+[data-theme="dark"] {
+  --ds-color-text-primary: #93c5fd;
+}
+```
+
+5. TypeScript 消费（可选）
+```ts
+export const TOKENS = {
+  color: { text: { primary: 'var(--ds-color-text-primary)' } },
+  space: { stack: { sm: 'var(--ds-space-stack-sm)' } }
+} as const;
+```
+
+6. 使用示例（组件）
+```vue
+<template>
+  <button class="btn-primary"><slot /></button>
+</template>
+<style scoped>
+.btn-primary {
+  background: var(--ds-color-text-primary);
+  padding: var(--ds-space-stack-sm) calc(var(--ds-space-stack-sm) * 2);
+  border-radius: var(--ds-size-radius-sm,4px);
+}
+</style>
+```
+
+7. 治理与校验
+   - CI 中校验未引用孤立原子（semantic 覆盖率 >= 90%）。
+   - 变更需附 design review / 截图 diff。
+   - Token 变更语义不兼容时递增设计版本号（`designVersion`）。
+
+8. Anti-pattern（避免）
+   - 在组件中硬编码 `#1d4ed8` 等物理色值。
+   - 语义层绕过直接引用原子导致多主题难切换。
+   - 组件 Token 指向另一个组件 Token（耦合传播）。
+
+## 8. 性能优化（通用）
+- 代码分割：`defineAsyncComponent` + 动态 import，路由级 & 重型特性级。
+- 静态资源：图片懒加载 / 优化格式 (webp, avif) / 预加载关键字体。
+- 响应式优化：避免在 `watch` 中做昂贵同步；使用 `computed` 缓存；仅在需要浅层时使用 `shallowRef`；对大型静态对象 `markRaw`。
+- 避免重复渲染：拆分子组件 + `v-memo`（实验）/ 合理 key；减少不必要 reactive 包装。
+- 列表虚拟化：>100 条滚动列表使用 Vue Virtual Scroller / 自研虚拟容器。
+- 首屏优化：路由级骨架屏 + 关键上游接口并行触发。
+- 性能基线指标：LCP < 2.5s（中位），CLS < 0.1，TTI < 3s。
+
+## 9. 可访问性 (a11y)（通用）
+- 表单元素正确关联 label（`for` + `id` 或包裹关系）。
+- 图像提供 alt 文本；纯装饰图 `alt=""` 并 `role="presentation"`。
+- 色彩对比满足 WCAG AA；主题切换后自动测试（视觉回归 + axe）。
+- 键盘可达：Tab 顺序合理，焦点 ring 不移除；可用 `:focus-visible` 优化体验。
+- ARIA：自定义组件（下拉、对话框）参照 WAI-ARIA Authoring Practices。
+
+## 10. 安全（通用）
+- 输出转义：`v-html` 严格限制；统一 sanitize 白名单策略。
+- CSRF：httpOnly Cookie + SameSite + 后端双重验证（token/header）。
+- 依赖审计：`pnpm audit` / Snyk CI 周期检查。
+- Token 管理：禁止本地存储长生命周期敏感 token；使用刷新机制。
+- 供应链：锁文件 + 完整性校验（subresource integrity 视情况）。
+- 机密注入：构建期白名单 + runtime 注入差异（Nuxt 私有运行时 vars）。
+
+## 11. 测试（通用）
+| 类型 | 目的 | 工具 |
+| ---- | ---- | ---- |
+| 单元 | 纯函数 / 组合式逻辑 / 基础组件 | Vitest + Vue Testing Library |
+| 组件可视 | UI 状态 & 回归 | Storybook / Chromatic |
+| 集成 | 页面行为 + 路由守卫 | Playwright / Cypress |
+| 端到端 | 关键用户旅程 | Playwright / Cypress |
+
+最小要求：关键交互（提交、搜索、支付） + 高复杂组件（表格、富文本、可拖拽）。
+测试选择器：使用 `data-test`，避免依赖结构 / 文本。
+避免过度快照：验证语义（角色、文本、状态）而不是整块 DOM。
+
+## 12. 构建与质量（通用）
+- Lint：ESLint (`vue`, `typescript`, `import`, `security`) + Stylelint + Prettier (单一格式入口)。
+- Pre-commit：lint-staged 执行 lint & 受影响测试。
+- Commit 规范：Conventional Commits；自动生成 CHANGELOG。
+- 体积监控：`rollup-plugin-visualizer` / `bundlesize` CI budget 报警。
+- 死代码检测：`ts-prune` / `unimport` 检查未使用导出。
+
+## 13. 国际化 (i18n)（通用）
+- 文本资源集中 `locales/{lang}.json` 或 message.ts；按命名空间（common, user, order）。
+- 禁止硬编码中文：使用 `t('ns.key')`；允许极少量纯装饰文本。
+- 支持复数/占位：ICU message 或 vue-i18n plural。
+- 动态加载：按语言/命名空间懒加载 bundle。
+
+## 14. 监控与埋点（通用）
+- 错误上报：Sentry (source map 上传) + release 版本。
+- 性能指标：TTFB / FCP / LCP / CLS / INP；CLS / LCP 异常阈值告警。
+- 用户关键事件：登录 / 下单 / 支付 / 退出 / 失败重试。
+- 埋点封装：`track(event, payload)`；事件枚举集中维护，禁止魔法字符串散落。
+- Trace 关联：页面初始 traceId 注入到 API 请求 header；端到端追踪。
+
+## 15. 部署与交付（通用）
+- 产物：文件名 content hash；HTML 中预加载关键 chunk。
+- CI 流水线：lint → test → type-check → build → bundle 分析 → artifact 签名 → 部署。
+- 环境变量：仅允许 `VITE_` 前缀注入客户端；严格审计敏感信息。
+- 回滚：保留最近 3 版产物；错误率或 LCP 激增触发自动回滚策略。
+
+## 16. 自查 Checklist（通用）
+- [ ] 组件粒度合适，无巨型 God Component
+- [ ] 关键数据流具备明确类型（无隐式 any）
+- [ ] API 错误处理统一 & 带 traceId
+- [ ] 关键用户路径具备自动化测试
+- [ ] 首屏 JS gzip 体积 <= 250KB（含框架）
+- [ ] 未出现多余响应式包装 / 无冗余 watch
+- [ ] a11y 核心检测通过（axe 无严重违规）
+- [ ] Token 使用无硬编码颜色/间距
+
+## 17. 与其他规范关系
+- 通用编码：`coding-standards.mdc`
+- 测试：`testing.mdc`
+- 安全：`security.mdc`
+- 可观测：`observability.mdc`
+- 文档：`document.mdc`
+- Vue 专项：`vue.mdc`
+
+后续可扩展：Token 版本治理、微前端接入策略、性能剖析 Playbook、包体积 Budget 控制策略。
