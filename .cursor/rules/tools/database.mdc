@@ -1,0 +1,1329 @@
+---
+description: 数据库设计规范与最佳实践
+globs: []
+alwaysApply: true
+---
+最近更新: 2025-12-28
+
+# 数据库设计规范
+
+> 涵盖数据库设计、建模、索引、约束、事务等核心规范
+
+## 1. 外键约束原则
+
+### 1.1 核心规则
+
+- **禁止物理外键**：在数据库层面不要添加物理外键关联（FOREIGN KEY 约束）
+- **业务逻辑层处理**：表之间的关联关系仅在业务逻辑层（应用层）进行维护和校验
+
+### 1.2 原因说明
+
+| 维度 | 说明 |
+|------|------|
+| **灵活性** | 避免级联删除/更新带来的意外影响，业务逻辑更可控 |
+| **扩展性** | 便于分库分表和水平扩展，不受外键约束限制 |
+| **性能** | 减少数据库层面的锁竞争，提高并发性能 |
+| **维护性** | 支持更灵活的关联关系变更，无需修改数据库结构 |
+
+### 1.3 实践示例
+
+```sql
+-- ❌ 不推荐：使用物理外键
+CREATE TABLE orders (
+    id BIGINT PRIMARY KEY,
+    user_id BIGINT NOT NULL,
+    FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
+);
+
+-- ✅ 推荐：不使用物理外键，在业务逻辑层校验
+CREATE TABLE orders (
+    id BIGINT PRIMARY KEY,
+    user_id BIGINT NOT NULL,
+    INDEX idx_user_id (user_id)  -- 仅添加索引以优化查询性能
+    -- 不在数据库层面添加 FOREIGN KEY 约束
+);
+```
+
+## 2. 关联关系维护
+
+### 2.1 维护原则
+
+- **应用层校验**：在应用层通过代码逻辑保证数据一致性
+- **事务保证**：使用事务确保关联操作的原子性
+- **约束替代**：通过唯一索引保证业务层面的唯一性约束
+
+### 2.2 Java 示例
+
+```java
+// ✅ 在业务逻辑层进行关联校验
+public class OrderService {
+    
+    @Transactional
+    public Order createOrder(CreateOrderRequest request) {
+        // 1. 在业务逻辑层验证用户是否存在
+        User user = userRepository.findById(request.getUserId())
+            .orElseThrow(() -> new BusinessException("用户不存在"));
+        
+        // 2. 验证商品库存
+        for (OrderItem item : request.getItems()) {
+            Product product = productRepository.findById(item.getProductId())
+                .orElseThrow(() -> new BusinessException("商品不存在"));
+            
+            if (product.getStock() < item.getQuantity()) {
+                throw new BusinessException("商品库存不足");
+            }
+        }
+        
+        // 3. 创建订单（在事务中保证原子性）
+        Order order = new Order();
+        order.setUserId(request.getUserId());
+        order.setStatus(OrderStatus.PENDING);
+        order = orderRepository.save(order);
+        
+        // 4. 创建订单项并扣减库存
+        for (OrderItem item : request.getItems()) {
+            item.setOrderId(order.getId());
+            orderItemRepository.save(item);
+            productRepository.decreaseStock(item.getProductId(), item.getQuantity());
+        }
+        
+        return order;
+    }
+}
+```
+
+### 2.3 Python 示例
+
+```python
+# ✅ 在业务逻辑层维护关联关系
+class OrderService:
+    
+    def create_order(self, user_id: int, items: List[OrderItem]) -> Order:
+        # 1. 验证用户存在
+        if not self.user_repository.exists(user_id):
+            raise BusinessException("用户不存在")
+        
+        # 2. 在事务中创建订单和订单项
+        with self.db.transaction():
+            # 创建订单
+            order = Order(user_id=user_id, status='PENDING')
+            order = self.order_repository.save(order)
+            
+            # 创建订单项
+            for item in items:
+                # 验证商品存在
+                product = self.product_repository.find_by_id(item.product_id)
+                if not product:
+                    raise BusinessException(f"商品 {item.product_id} 不存在")
+                
+                # 验证库存
+                if product.stock < item.quantity:
+                    raise BusinessException(f"商品 {product.name} 库存不足")
+                
+                # 创建订单项
+                order_item = OrderItem(
+                    order_id=order.id,
+                    product_id=item.product_id,
+                    quantity=item.quantity,
+                    price=product.price
+                )
+                self.order_item_repository.save(order_item)
+                
+                # 扣减库存
+                self.product_repository.decrease_stock(item.product_id, item.quantity)
+        
+        return order
+```
+
+### 2.4 C# 示例
+
+```csharp
+// ✅ 在业务逻辑层维护关联关系
+public class OrderService
+{
+    private readonly IUserRepository _userRepository;
+    private readonly IProductRepository _productRepository;
+    private readonly IOrderRepository _orderRepository;
+    private readonly IOrderItemRepository _orderItemRepository;
+    private readonly IUnitOfWork _unitOfWork;
+    
+    [Transaction]
+    public async Task<Order> CreateOrderAsync(CreateOrderRequest request)
+    {
+        // 1. 验证用户存在
+        var user = await _userRepository.GetByIdAsync(request.UserId)
+            ?? throw new BusinessException("用户不存在");
+        
+        // 2. 验证商品和库存
+        foreach (var item in request.Items)
+        {
+            var product = await _productRepository.GetByIdAsync(item.ProductId)
+                ?? throw new BusinessException($"商品 {item.ProductId} 不存在");
+            
+            if (product.Stock < item.Quantity)
+                throw new BusinessException($"商品 {product.Name} 库存不足");
+        }
+        
+        // 3. 创建订单（在事务中）
+        var order = new Order
+        {
+            UserId = request.UserId,
+            Status = OrderStatus.Pending,
+            CreatedAt = DateTime.UtcNow
+        };
+        await _orderRepository.AddAsync(order);
+        
+        // 4. 创建订单项并扣减库存
+        foreach (var item in request.Items)
+        {
+            var orderItem = new OrderItem
+            {
+                OrderId = order.Id,
+                ProductId = item.ProductId,
+                Quantity = item.Quantity,
+                Price = item.Price
+            };
+            await _orderItemRepository.AddAsync(orderItem);
+            await _productRepository.DecreaseStockAsync(item.ProductId, item.Quantity);
+        }
+        
+        // 5. 提交事务
+        await _unitOfWork.CommitAsync();
+        
+        return order;
+    }
+}
+```
+
+## 3. 数据建模原则
+
+### 3.1 范式化权衡
+
+| 场景 | 推荐范式 | 原因 |
+|------|----------|------|
+| **OLTP（事务处理）** | 2NF~3NF | 减少数据冗余，保证一致性 |
+| **OLAP（分析查询）** | 反范式化 | 减少 JOIN，提高查询性能 |
+| **高并发写入** | 适度反范式 | 减少表关联，提高写入性能 |
+
+### 3.2 主键设计
+
+```sql
+-- ✅ 推荐：使用自增 ID 或雪花 ID
+CREATE TABLE users (
+    id BIGINT PRIMARY KEY AUTO_INCREMENT,  -- 或使用雪花 ID
+    username VARCHAR(50) NOT NULL UNIQUE,
+    email VARCHAR(100) NOT NULL UNIQUE,
+    created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP
+);
+
+-- ❌ 不推荐：使用业务字段作为主键
+CREATE TABLE users (
+    email VARCHAR(100) PRIMARY KEY,  -- 业务字段变更会影响关联表
+    username VARCHAR(50) NOT NULL,
+    created_at TIMESTAMP NOT NULL
+);
+```
+
+### 3.3 数据类型选择
+
+| 业务场景 | 推荐类型 | 避免使用 | 原因 |
+|----------|----------|----------|------|
+| **金额** | `DECIMAL(19,4)` | `FLOAT/DOUBLE` | 避免精度丢失 |
+| **状态** | `VARCHAR(50)` 或 `TINYINT` | `ENUM` | 扩展性好 |
+| **日期时间** | `TIMESTAMP` (UTC) | `DATETIME` 无时区 | 时区转换 |
+| **布尔值** | `BOOLEAN/TINYINT(1)` | `VARCHAR` | 类型安全 |
+| **大文本** | `TEXT/LONGTEXT` | `VARCHAR(MAX)` | 适合内容 |
+| **JSON** | `JSON` 列类型 | `TEXT` 序列化 | 支持索引和查询 |
+
+## 4. 索引设计策略
+
+### 4.1 索引类型选择
+
+```sql
+-- 1. 主键索引（自动创建）
+CREATE TABLE users (
+    id BIGINT PRIMARY KEY AUTO_INCREMENT
+);
+
+-- 2. 唯一索引（保证唯一性）
+CREATE UNIQUE INDEX uk_email ON users(email);
+
+-- 3. 普通索引（提高查询性能）
+CREATE INDEX idx_created_at ON users(created_at);
+
+-- 4. 复合索引（多字段查询）
+CREATE INDEX idx_status_created ON orders(status, created_at);
+
+-- 5. 全文索引（文本搜索）
+CREATE FULLTEXT INDEX ft_content ON articles(title, content);
+```
+
+### 4.2 复合索引顺序
+
+```sql
+-- ✅ 推荐：高选择性字段在前
+-- 查询: WHERE status = 'PAID' AND user_id = 123
+CREATE INDEX idx_status_user ON orders(status, user_id);
+
+-- ❌ 不推荐：低选择性字段在前
+CREATE INDEX idx_user_status ON orders(user_id, status);
+```
+
+**原则**：
+- 等值查询字段在前
+- 范围查询字段在后
+- 高选择性字段在前（区分度高）
+
+### 4.3 索引失效场景
+
+```sql
+-- ❌ 索引失效场景 1：使用函数
+SELECT * FROM orders WHERE DATE(created_at) = '2025-12-28';
+
+-- ✅ 改进：使用范围查询
+SELECT * FROM orders 
+WHERE created_at >= '2025-12-28 00:00:00' 
+  AND created_at < '2025-12-29 00:00:00';
+
+-- ❌ 索引失效场景 2：隐式类型转换
+SELECT * FROM users WHERE phone = 13800138000;  -- phone 是 VARCHAR
+
+-- ✅ 改进：使用正确类型
+SELECT * FROM users WHERE phone = '13800138000';
+
+-- ❌ 索引失效场景 3：前导模糊查询
+SELECT * FROM products WHERE name LIKE '%手机%';
+
+-- ✅ 改进：后缀模糊查询可以使用索引
+SELECT * FROM products WHERE name LIKE '苹果%';
+
+-- ❌ 索引失效场景 4：OR 条件（未索引字段）
+SELECT * FROM orders WHERE user_id = 123 OR remark LIKE '%urgent%';
+
+-- ✅ 改进：使用 UNION
+SELECT * FROM orders WHERE user_id = 123
+UNION
+SELECT * FROM orders WHERE remark LIKE '%urgent%';
+
+-- ❌ 索引失效场景 5：NOT、!=、<> 操作符
+SELECT * FROM orders WHERE status != 'CANCELLED';
+
+-- ✅ 改进：使用 IN 或其他条件
+SELECT * FROM orders WHERE status IN ('PENDING', 'PAID', 'SHIPPED', 'COMPLETED');
+```
+
+### 4.4 索引维护
+
+```sql
+-- 查看索引使用情况
+SHOW INDEX FROM orders;
+
+-- 分析索引效率
+EXPLAIN SELECT * FROM orders WHERE status = 'PAID';
+
+-- 查看索引统计信息（MySQL）
+SELECT 
+    table_name,
+    index_name,
+    seq_in_index,
+    column_name,
+    cardinality
+FROM information_schema.statistics
+WHERE table_schema = 'your_database'
+  AND table_name = 'orders';
+
+-- 删除冗余索引
+DROP INDEX idx_redundant ON orders;
+
+-- 重建索引（碎片整理）
+ALTER TABLE orders ENGINE=InnoDB;
+
+-- 查看未使用的索引（MySQL 5.7+）
+SELECT * FROM sys.schema_unused_indexes;
+```
+
+## 5. 事务与并发控制
+
+### 5.1 事务隔离级别
+
+| 隔离级别 | 脏读 | 不可重复读 | 幻读 | 性能 | 适用场景 |
+|----------|------|------------|------|------|----------|
+| **READ UNCOMMITTED** | ✗ | ✗ | ✗ | 最高 | 不推荐 |
+| **READ COMMITTED** | ✓ | ✗ | ✗ | 高 | 大部分场景 |
+| **REPEATABLE READ** | ✓ | ✓ | ✗ | 中 | MySQL 默认 |
+| **SERIALIZABLE** | ✓ | ✓ | ✓ | 最低 | 严格一致性 |
+
+### 5.2 乐观锁实现
+
+```sql
+-- 使用版本号实现乐观锁
+CREATE TABLE products (
+    id BIGINT PRIMARY KEY,
+    name VARCHAR(100) NOT NULL,
+    stock INT NOT NULL,
+    version INT NOT NULL DEFAULT 0,  -- 版本号
+    updated_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP
+);
+
+-- 更新时检查版本号
+UPDATE products 
+SET stock = stock - 1, 
+    version = version + 1 
+WHERE id = ? AND version = ?;
+```
+
+```java
+// Java 实现
+@Transactional
+public void decreaseStock(Long productId, int quantity, int currentVersion) {
+    int updated = productRepository.updateStock(productId, quantity, currentVersion);
+    if (updated == 0) {
+        throw new OptimisticLockException("商品信息已被修改，请重试");
+    }
+}
+```
+
+### 5.3 悲观锁实现
+
+```sql
+-- 使用 FOR UPDATE 实现悲观锁
+BEGIN;
+SELECT * FROM products WHERE id = ? FOR UPDATE;
+UPDATE products SET stock = stock - 1 WHERE id = ?;
+COMMIT;
+```
+
+```java
+// Java 实现
+@Transactional
+public void decreaseStockWithLock(Long productId, int quantity) {
+    Product product = productRepository.findByIdForUpdate(productId);
+    if (product.getStock() < quantity) {
+        throw new BusinessException("库存不足");
+    }
+    product.setStock(product.getStock() - quantity);
+    productRepository.save(product);
+}
+```
+
+## 6. 命名规范
+
+### 6.1 表命名
+
+```sql
+-- ✅ 推荐：复数形式，小写字母，下划线分隔
+users
+orders
+order_items
+product_categories
+
+-- ❌ 不推荐
+User          -- 大写
+tbl_user      -- 前缀无意义
+user_info     -- 冗余后缀
+```
+
+### 6.2 字段命名
+
+```sql
+-- ✅ 推荐：小写字母，下划线分隔，语义清晰
+id
+user_id
+created_at
+updated_at
+is_active
+total_amount
+
+-- ❌ 不推荐
+ID            -- 大写
+userId        -- 驼峰命名
+create_time   -- 不一致（应该用 created_at）
+flag          -- 语义不清
+```
+
+### 6.3 索引命名
+
+```sql
+-- 主键索引：pk_表名
+ALTER TABLE users ADD CONSTRAINT pk_users PRIMARY KEY (id);
+
+-- 唯一索引：uk_表名_字段名
+CREATE UNIQUE INDEX uk_users_email ON users(email);
+
+-- 普通索引：idx_表名_字段名
+CREATE INDEX idx_orders_user_id ON orders(user_id);
+
+-- 外键索引（虽然不建议物理外键，但索引仍需要）：idx_表名_关联字段
+CREATE INDEX idx_orders_user_id ON orders(user_id);
+```
+
+## 7. 字段设计规范
+
+### 7.1 必备字段
+
+```sql
+-- 每个表都应该包含的基础字段
+CREATE TABLE example (
+    id BIGINT PRIMARY KEY AUTO_INCREMENT,
+    
+    -- 业务字段
+    -- ...
+    
+    -- 必备的审计字段
+    created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP COMMENT '创建时间',
+    updated_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP COMMENT '更新时间',
+    created_by BIGINT COMMENT '创建人ID',
+    updated_by BIGINT COMMENT '更新人ID',
+    
+    -- 软删除字段（可选）
+    deleted_at TIMESTAMP NULL COMMENT '删除时间',
+    is_deleted TINYINT NOT NULL DEFAULT 0 COMMENT '是否删除：0否 1是',
+    
+    -- 版本号（需要乐观锁时）
+    version INT NOT NULL DEFAULT 0 COMMENT '版本号'
+);
+```
+
+### 7.2 字段约束
+
+```sql
+-- ✅ 推荐：明确约束和默认值
+CREATE TABLE users (
+    id BIGINT PRIMARY KEY AUTO_INCREMENT,
+    username VARCHAR(50) NOT NULL UNIQUE COMMENT '用户名',
+    email VARCHAR(100) NOT NULL UNIQUE COMMENT '邮箱',
+    status TINYINT NOT NULL DEFAULT 1 COMMENT '状态：0禁用 1正常',
+    created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP COMMENT '创建时间'
+);
+
+-- ❌ 不推荐：缺少约束和注释
+CREATE TABLE users (
+    id BIGINT,
+    username VARCHAR(50),
+    email VARCHAR(100),
+    status TINYINT,
+    created_at TIMESTAMP
+);
+```
+
+## 8. 性能优化建议
+
+### 8.1 查询优化
+
+```sql
+-- ✅ 推荐：使用索引字段查询
+SELECT * FROM orders WHERE user_id = 123 AND status = 'PAID';
+
+-- ❌ 不推荐：函数会导致索引失效
+SELECT * FROM orders WHERE DATE(created_at) = '2025-12-28';
+
+-- ✅ 改进：使用范围查询
+SELECT * FROM orders 
+WHERE created_at >= '2025-12-28 00:00:00' 
+  AND created_at < '2025-12-29 00:00:00';
+```
+
+### 8.2 分页优化
+
+```sql
+-- ❌ 不推荐：深度分页性能差
+SELECT * FROM orders ORDER BY id LIMIT 10000, 20;
+
+-- ✅ 推荐：使用主键范围查询
+SELECT * FROM orders WHERE id > 10000 ORDER BY id LIMIT 20;
+```
+
+### 8.3 批量操作
+
+```sql
+-- ✅ 推荐：批量插入
+INSERT INTO order_items (order_id, product_id, quantity) VALUES
+(1, 101, 2),
+(1, 102, 1),
+(1, 103, 3);
+
+-- ❌ 不推荐：逐条插入
+INSERT INTO order_items (order_id, product_id, quantity) VALUES (1, 101, 2);
+INSERT INTO order_items (order_id, product_id, quantity) VALUES (1, 102, 1);
+INSERT INTO order_items (order_id, product_id, quantity) VALUES (1, 103, 3);
+```
+
+### 8.4 避免 N+1 查询
+
+```java
+// ❌ N+1 查询问题
+List<Order> orders = orderRepository.findAll();
+for (Order order : orders) {
+    // 每次循环都会执行一次查询
+    User user = userRepository.findById(order.getUserId());
+    order.setUser(user);
+}
+
+// ✅ 使用 JOIN 或 IN 查询
+List<Order> orders = orderRepository.findAll();
+Set<Long> userIds = orders.stream()
+    .map(Order::getUserId)
+    .collect(Collectors.toSet());
+List<User> users = userRepository.findByIdIn(userIds);
+Map<Long, User> userMap = users.stream()
+    .collect(Collectors.toMap(User::getId, u -> u));
+orders.forEach(order -> order.setUser(userMap.get(order.getUserId())));
+
+// ✅ 或使用 JPA 的 fetch join
+@Query("SELECT o FROM Order o JOIN FETCH o.user")
+List<Order> findAllWithUser();
+```
+
+### 8.5 COUNT 优化
+
+```sql
+-- ❌ 不推荐：COUNT(*) 在大表上很慢
+SELECT COUNT(*) FROM orders;
+
+-- ✅ 推荐：使用近似值（适用于展示场景）
+SELECT table_rows FROM information_schema.tables 
+WHERE table_schema = 'your_database' AND table_name = 'orders';
+
+-- ✅ 推荐：带条件的 COUNT 使用覆盖索引
+SELECT COUNT(*) FROM orders WHERE status = 'PAID';  -- status 有索引
+
+-- ✅ 推荐：分页时避免 COUNT，使用游标分页
+SELECT * FROM orders WHERE id > ? ORDER BY id LIMIT 20;
+```
+
+### 8.6 大字段优化
+
+```sql
+-- ❌ 不推荐：大字段和常用字段混在一起
+CREATE TABLE articles (
+    id BIGINT PRIMARY KEY,
+    title VARCHAR(200) NOT NULL,
+    author VARCHAR(50) NOT NULL,
+    content LONGTEXT,  -- 大字段
+    created_at TIMESTAMP NOT NULL
+);
+
+-- ✅ 推荐：大字段分离到扩展表
+CREATE TABLE articles (
+    id BIGINT PRIMARY KEY,
+    title VARCHAR(200) NOT NULL,
+    author VARCHAR(50) NOT NULL,
+    created_at TIMESTAMP NOT NULL,
+    INDEX idx_created_at (created_at)
+);
+
+CREATE TABLE article_contents (
+    article_id BIGINT PRIMARY KEY,
+    content LONGTEXT NOT NULL,
+    INDEX idx_article_id (article_id)
+);
+```
+
+## 9. 分库分表策略
+
+### 9.1 何时考虑分库分表
+
+| 指标 | 阈值 | 说明 |
+|------|------|------|
+| **单表数据量** | > 500万 | 查询性能明显下降 |
+| **单表大小** | > 2GB | 影响备份和恢复 |
+| **并发写入** | > 1000 TPS | 单库写入瓶颈 |
+| **存储容量** | > 500GB | 单库存储压力 |
+
+### 9.2 分库分表策略
+
+```sql
+-- 水平分表：按时间分表
+CREATE TABLE orders_2025_01 (
+    id BIGINT PRIMARY KEY,
+    user_id BIGINT NOT NULL,
+    created_at TIMESTAMP NOT NULL,
+    INDEX idx_user_id (user_id),
+    INDEX idx_created_at (created_at)
+) PARTITION BY RANGE (YEAR(created_at) * 100 + MONTH(created_at)) (
+    PARTITION p202501 VALUES LESS THAN (202502),
+    PARTITION p202502 VALUES LESS THAN (202503),
+    PARTITION p202503 VALUES LESS THAN (202504)
+);
+
+-- 水平分表：按用户 ID 取模
+-- orders_0, orders_1, orders_2, ... orders_9
+CREATE TABLE orders_0 (
+    id BIGINT PRIMARY KEY,
+    user_id BIGINT NOT NULL,
+    -- user_id % 10 = 0 的数据
+    INDEX idx_user_id (user_id)
+);
+
+-- 垂直分表：按业务拆分
+-- 订单基础信息表
+CREATE TABLE orders (
+    id BIGINT PRIMARY KEY,
+    user_id BIGINT NOT NULL,
+    status VARCHAR(20) NOT NULL,
+    total_amount DECIMAL(19,4) NOT NULL,
+    created_at TIMESTAMP NOT NULL
+);
+
+-- 订单扩展信息表
+CREATE TABLE order_details (
+    order_id BIGINT PRIMARY KEY,
+    shipping_address TEXT,
+    remark TEXT,
+    invoice_info TEXT
+);
+```
+
+### 9.3 分库分表路由规则
+
+```java
+// 分表路由示例
+public class ShardingStrategy {
+    
+    private static final int TABLE_COUNT = 10;
+    
+    // 按用户 ID 取模
+    public String getTableName(Long userId) {
+        int suffix = (int) (userId % TABLE_COUNT);
+        return "orders_" + suffix;
+    }
+    
+    // 按时间分表
+    public String getTableNameByDate(LocalDateTime date) {
+        return "orders_" + date.format(DateTimeFormatter.ofPattern("yyyyMM"));
+    }
+    
+    // 范围查询需要查询多个表
+    public List<String> getTableNamesForRange(LocalDateTime start, LocalDateTime end) {
+        List<String> tables = new ArrayList<>();
+        LocalDateTime current = start;
+        while (!current.isAfter(end)) {
+            tables.add(getTableNameByDate(current));
+            current = current.plusMonths(1);
+        }
+        return tables;
+    }
+}
+```
+
+### 9.4 分库分表注意事项
+
+- **跨库事务**：避免跨库事务，使用分布式事务（Saga/TCC）或最终一致性
+- **全局唯一 ID**：使用雪花算法或分布式 ID 生成器
+- **跨库 JOIN**：在应用层进行数据聚合，避免跨库 JOIN
+- **扩容方案**：预留扩容策略，如一致性哈希、虚拟节点
+- **数据迁移**：制定数据迁移方案，支持平滑扩容
+
+## 10. 数据库迁移与版本控制
+
+### 10.1 迁移脚本规范
+
+```sql
+-- V1.0.0__create_users_table.sql
+-- 命名规范：V{版本号}__{描述}.sql
+
+CREATE TABLE users (
+    id BIGINT PRIMARY KEY AUTO_INCREMENT,
+    username VARCHAR(50) NOT NULL UNIQUE,
+    email VARCHAR(100) NOT NULL UNIQUE,
+    created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+-- V1.0.1__add_user_status.sql
+ALTER TABLE users ADD COLUMN status TINYINT NOT NULL DEFAULT 1 COMMENT '状态：0禁用 1正常';
+CREATE INDEX idx_status ON users(status);
+
+-- V1.0.2__create_orders_table.sql
+CREATE TABLE orders (
+    id BIGINT PRIMARY KEY AUTO_INCREMENT,
+    user_id BIGINT NOT NULL,
+    total_amount DECIMAL(19,4) NOT NULL,
+    status VARCHAR(20) NOT NULL,
+    created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    INDEX idx_user_id (user_id),
+    INDEX idx_status (status)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+```
+
+### 10.2 迁移工具推荐
+
+| 工具 | 语言 | 特点 | 适用场景 |
+|------|------|------|----------|
+| **Flyway** | Java | 简单易用，支持多数据库 | Java 项目 |
+| **Liquibase** | Java | 功能强大，支持回滚 | 企业级项目 |
+| **Alembic** | Python | SQLAlchemy 集成 | Python 项目 |
+| **golang-migrate** | Go | 轻量级，CLI 工具 | Go 项目 |
+| **Entity Framework** | C# | ORM 集成 | .NET 项目 |
+
+### 10.3 迁移最佳实践
+
+```java
+// Flyway 配置示例
+@Configuration
+public class FlywayConfig {
+    
+    @Bean
+    public Flyway flyway(DataSource dataSource) {
+        return Flyway.configure()
+            .dataSource(dataSource)
+            .locations("classpath:db/migration")
+            .baselineOnMigrate(true)  // 已有数据库时使用
+            .validateOnMigrate(true)  // 验证脚本完整性
+            .outOfOrder(false)        // 禁止乱序执行
+            .load();
+    }
+}
+```
+
+**迁移原则**：
+- **只增不减**：新版本只能添加，不能修改或删除已执行的脚本
+- **向前兼容**：新版本必须兼容旧版本数据
+- **可回滚**：提供回滚脚本或回滚方案
+- **测试验证**：在测试环境充分验证后再上生产
+- **增量迁移**：大数据量迁移分批执行，避免锁表
+
+### 10.4 数据迁移示例
+
+```sql
+-- 大表添加字段（避免锁表）
+-- 方案 1：先添加字段（允许 NULL），再批量更新，最后改为 NOT NULL
+ALTER TABLE orders ADD COLUMN priority TINYINT NULL COMMENT '优先级';
+
+-- 批量更新（分批执行，避免长事务）
+UPDATE orders SET priority = 1 WHERE id BETWEEN 1 AND 10000;
+UPDATE orders SET priority = 1 WHERE id BETWEEN 10001 AND 20000;
+-- ... 继续分批
+
+-- 修改为 NOT NULL
+ALTER TABLE orders MODIFY COLUMN priority TINYINT NOT NULL DEFAULT 1;
+
+-- 方案 2：使用 pt-online-schema-change（推荐）
+pt-online-schema-change \
+  --alter "ADD COLUMN priority TINYINT NOT NULL DEFAULT 1 COMMENT '优先级'" \
+  --execute \
+  D=your_database,t=orders
+```
+
+## 11. 安全规范
+
+### 9.1 防止 SQL 注入
+
+```java
+// ✅ 推荐：使用参数化查询
+String sql = "SELECT * FROM users WHERE username = ? AND password = ?";
+PreparedStatement stmt = conn.prepareStatement(sql);
+stmt.setString(1, username);
+stmt.setString(2, password);
+
+// ❌ 不推荐：字符串拼接
+String sql = "SELECT * FROM users WHERE username = '" + username + "' AND password = '" + password + "'";
+```
+
+### 11.2 敏感数据处理
+
+```sql
+-- ✅ 推荐：敏感字段加密存储
+CREATE TABLE users (
+    id BIGINT PRIMARY KEY,
+    username VARCHAR(50) NOT NULL,
+    password_hash VARCHAR(255) NOT NULL,  -- 存储哈希值，不存储明文
+    phone_encrypted VARCHAR(255),         -- 加密存储
+    id_card_encrypted VARCHAR(255)        -- 加密存储
+);
+```
+
+### 11.3 数据库权限管理
+
+```sql
+-- ✅ 推荐：最小权限原则
+
+-- 应用只读账号（查询服务）
+CREATE USER 'app_readonly'@'%' IDENTIFIED BY 'strong_password';
+GRANT SELECT ON your_database.* TO 'app_readonly'@'%';
+
+-- 应用读写账号（业务服务）
+CREATE USER 'app_readwrite'@'%' IDENTIFIED BY 'strong_password';
+GRANT SELECT, INSERT, UPDATE ON your_database.* TO 'app_readwrite'@'%';
+
+-- DBA 账号（运维管理）
+CREATE USER 'dba_admin'@'%' IDENTIFIED BY 'strong_password';
+GRANT ALL PRIVILEGES ON your_database.* TO 'dba_admin'@'%';
+
+-- 刷新权限
+FLUSH PRIVILEGES;
+
+-- ❌ 不推荐：使用 root 账号或授予过多权限
+GRANT ALL PRIVILEGES ON *.* TO 'app'@'%';  -- 危险！
+```
+
+## 12. 备份与恢复策略
+
+### 12.1 备份策略
+
+| 备份类型 | 频率 | 保留时长 | 适用场景 |
+|----------|------|----------|----------|
+| **全量备份** | 每周 | 4周 | 灾难恢复 |
+| **增量备份** | 每天 | 7天 | 日常恢复 |
+| **binlog 备份** | 实时 | 7天 | 点恢复 |
+| **快照备份** | 每天 | 3天 | 快速恢复 |
+
+### 12.2 备份脚本示例
+
+```bash
+#!/bin/bash
+# MySQL 全量备份脚本
+
+BACKUP_DIR="/data/backup/mysql"
+DATE=$(date +%Y%m%d_%H%M%S)
+DB_NAME="your_database"
+DB_USER="backup_user"
+DB_PASS="backup_password"
+
+# 创建备份目录
+mkdir -p ${BACKUP_DIR}
+
+# 执行备份
+mysqldump \
+  -u${DB_USER} \
+  -p${DB_PASS} \
+  --single-transaction \
+  --routines \
+  --triggers \
+  --events \
+  --hex-blob \
+  --default-character-set=utf8mb4 \
+  ${DB_NAME} | gzip > ${BACKUP_DIR}/${DB_NAME}_${DATE}.sql.gz
+
+# 删除 7 天前的备份
+find ${BACKUP_DIR} -name "*.sql.gz" -mtime +7 -delete
+
+# 验证备份文件
+if [ -f "${BACKUP_DIR}/${DB_NAME}_${DATE}.sql.gz" ]; then
+    echo "Backup successful: ${DB_NAME}_${DATE}.sql.gz"
+else
+    echo "Backup failed!" >&2
+    exit 1
+fi
+```
+
+### 12.3 恢复流程
+
+```bash
+# 1. 全量恢复
+gunzip < backup_20250101_120000.sql.gz | mysql -u root -p your_database
+
+# 2. 点恢复（恢复到指定时间点）
+# 先恢复全量备份
+gunzip < backup_20250101_120000.sql.gz | mysql -u root -p your_database
+
+# 再应用 binlog
+mysqlbinlog \
+  --start-datetime="2025-01-01 12:00:00" \
+  --stop-datetime="2025-01-01 14:30:00" \
+  mysql-bin.000001 | mysql -u root -p your_database
+
+# 3. 表级恢复
+mysqldump -u root -p your_database specific_table > table_backup.sql
+mysql -u root -p your_database < table_backup.sql
+```
+
+### 12.4 备份验证
+
+```bash
+# 定期验证备份可用性
+#!/bin/bash
+
+BACKUP_FILE="backup_20250101_120000.sql.gz"
+TEST_DB="test_restore_db"
+
+# 创建测试数据库
+mysql -u root -p -e "DROP DATABASE IF EXISTS ${TEST_DB}; CREATE DATABASE ${TEST_DB};"
+
+# 恢复到测试数据库
+gunzip < ${BACKUP_FILE} | mysql -u root -p ${TEST_DB}
+
+# 验证表数量
+TABLE_COUNT=$(mysql -u root -p -N -e "SELECT COUNT(*) FROM information_schema.tables WHERE table_schema='${TEST_DB}';")
+
+if [ ${TABLE_COUNT} -gt 0 ]; then
+    echo "Backup verification successful: ${TABLE_COUNT} tables restored"
+else
+    echo "Backup verification failed!" >&2
+    exit 1
+fi
+
+# 清理测试数据库
+mysql -u root -p -e "DROP DATABASE ${TEST_DB};"
+```
+
+## 13. 监控与告警
+
+### 13.1 关键监控指标
+
+| 类别 | 指标 | 告警阈值 | 说明 |
+|------|------|----------|------|
+| **连接** | 活跃连接数 | > 80% | 连接池耗尽风险 |
+| **性能** | QPS | 突增 50% | 流量异常 |
+| **性能** | 慢查询数 | > 10/分钟 | 查询性能问题 |
+| **性能** | 平均响应时间 | > 100ms | 性能下降 |
+| **存储** | 磁盘使用率 | > 80% | 空间不足 |
+| **存储** | 表空间大小 | 增长异常 | 数据膨胀 |
+| **复制** | 主从延迟 | > 10s | 同步延迟 |
+| **锁** | 锁等待数 | > 10 | 锁竞争严重 |
+| **错误** | 连接错误数 | > 5/分钟 | 连接问题 |
+
+### 13.2 监控查询示例
+
+```sql
+-- 查看当前连接数
+SHOW STATUS LIKE 'Threads_connected';
+
+-- 查看最大连接数
+SHOW VARIABLES LIKE 'max_connections';
+
+-- 查看慢查询数
+SHOW STATUS LIKE 'Slow_queries';
+
+-- 查看正在执行的查询
+SELECT 
+    id,
+    user,
+    host,
+    db,
+    command,
+    time,
+    state,
+    info
+FROM information_schema.processlist
+WHERE command != 'Sleep'
+ORDER BY time DESC;
+
+-- 查看表大小
+SELECT 
+    table_name,
+    ROUND(((data_length + index_length) / 1024 / 1024), 2) AS size_mb
+FROM information_schema.tables
+WHERE table_schema = 'your_database'
+ORDER BY size_mb DESC;
+
+-- 查看索引使用情况
+SELECT 
+    object_schema,
+    object_name,
+    index_name,
+    count_star,
+    count_read,
+    count_write
+FROM performance_schema.table_io_waits_summary_by_index_usage
+WHERE object_schema = 'your_database'
+ORDER BY count_star DESC;
+
+-- 查看锁等待
+SELECT 
+    r.trx_id waiting_trx_id,
+    r.trx_mysql_thread_id waiting_thread,
+    r.trx_query waiting_query,
+    b.trx_id blocking_trx_id,
+    b.trx_mysql_thread_id blocking_thread,
+    b.trx_query blocking_query
+FROM information_schema.innodb_lock_waits w
+INNER JOIN information_schema.innodb_trx b ON b.trx_id = w.blocking_trx_id
+INNER JOIN information_schema.innodb_trx r ON r.trx_id = w.requesting_trx_id;
+```
+
+### 13.3 慢查询分析
+
+```bash
+# 启用慢查询日志
+SET GLOBAL slow_query_log = 'ON';
+SET GLOBAL long_query_time = 1;  -- 1秒
+SET GLOBAL log_queries_not_using_indexes = 'ON';
+
+# 分析慢查询日志
+mysqldumpslow -s t -t 10 /var/log/mysql/slow.log
+
+# 使用 pt-query-digest 分析
+pt-query-digest /var/log/mysql/slow.log > slow_query_report.txt
+```
+
+## 14. 数据库设计检查清单
+
+### 10.1 表设计检查
+- [ ] 表名使用复数形式，小写字母，下划线分隔
+- [ ] 每个表都有主键（自增 ID 或雪花 ID）
+- [ ] 包含必备的审计字段（created_at, updated_at）
+- [ ] 字段类型选择合理（金额用 DECIMAL，状态用 VARCHAR/TINYINT）
+- [ ] 所有字段都有注释说明
+- [ ] NOT NULL 约束明确
+- [ ] 默认值设置合理
+
+### 10.2 索引设计检查
+- [ ] 主键索引已创建
+- [ ] 外键字段已添加索引（用于关联查询）
+- [ ] 高频查询字段已添加索引
+- [ ] 复合索引顺序合理（高选择性在前）
+- [ ] 没有冗余索引
+- [ ] 索引命名规范（idx_表名_字段名）
+
+### 10.3 约束设计检查
+- [ ] 不使用物理外键约束
+- [ ] 唯一性约束通过唯一索引实现
+- [ ] 业务规则在应用层校验
+- [ ] 事务边界清晰
+
+### 10.4 性能设计检查
+- [ ] 避免使用 SELECT *
+- [ ] 分页查询使用主键范围而非 OFFSET
+- [ ] 批量操作使用批量 SQL
+- [ ] 大表考虑分区策略
+- [ ] 查询语句已通过 EXPLAIN 分析
+
+### 14.5 安全设计检查
+- [ ] 使用参数化查询，防止 SQL 注入
+- [ ] 敏感字段加密存储
+- [ ] 数据库账号权限最小化
+- [ ] 不在代码中硬编码数据库密码
+
+### 14.6 备份恢复检查
+- [ ] 已制定备份策略（全量/增量）
+- [ ] 备份文件定期验证可用性
+- [ ] binlog 已开启并备份
+- [ ] 已演练恢复流程
+- [ ] 备份文件异地存储
+
+### 14.7 监控告警检查
+- [ ] 关键指标已监控（连接/QPS/慢查询/磁盘）
+- [ ] 慢查询日志已开启
+- [ ] 告警阈值已设置
+- [ ] 告警通知渠道已配置
+- [ ] 定期查看监控报表
+
+### 14.8 扩展性检查
+- [ ] 单表数据量预估（是否需要分表）
+- [ ] 并发量预估（是否需要分库）
+- [ ] 预留扩容方案
+- [ ] 使用全局唯一 ID
+- [ ] 避免跨库事务依赖
+
+## 15. 常见问题与解决方案
+
+### 15.1 性能问题
+
+**问题 1：查询慢**
+```sql
+-- 诊断步骤
+EXPLAIN SELECT * FROM orders WHERE user_id = 123;
+
+-- 解决方案
+-- 1. 添加索引
+CREATE INDEX idx_user_id ON orders(user_id);
+
+-- 2. 优化查询（避免 SELECT *）
+SELECT id, order_no, total_amount FROM orders WHERE user_id = 123;
+
+-- 3. 使用覆盖索引
+CREATE INDEX idx_user_id_status ON orders(user_id, status);
+SELECT user_id, status FROM orders WHERE user_id = 123;
+```
+
+**问题 2：死锁**
+```sql
+-- 查看死锁日志
+SHOW ENGINE INNODB STATUS;
+
+-- 解决方案
+-- 1. 保持事务简短
+-- 2. 按相同顺序访问表和行
+-- 3. 使用合适的索引减少锁范围
+-- 4. 降低事务隔离级别（如果业务允许）
+```
+
+**问题 3：主从延迟**
+```sql
+-- 查看延迟
+SHOW SLAVE STATUS\G
+
+-- 解决方案
+-- 1. 优化慢查询
+-- 2. 增加从库硬件配置
+-- 3. 使用并行复制
+SET GLOBAL slave_parallel_workers = 4;
+-- 4. 分离读写，减轻主库压力
+```
+
+### 15.2 数据问题
+
+**问题 4：数据不一致**
+```java
+// 原因：跨表操作未使用事务
+// 解决方案：使用事务保证原子性
+@Transactional
+public void transferMoney(Long fromUserId, Long toUserId, BigDecimal amount) {
+    // 扣款
+    accountRepository.decreaseBalance(fromUserId, amount);
+    // 加款
+    accountRepository.increaseBalance(toUserId, amount);
+    // 记录流水
+    transactionRepository.save(new Transaction(fromUserId, toUserId, amount));
+}
+```
+
+**问题 5：数据丢失**
+```bash
+# 原因：未开启 binlog 或备份不完整
+# 解决方案：
+# 1. 开启 binlog
+[mysqld]
+log-bin=mysql-bin
+binlog_format=ROW
+expire_logs_days=7
+
+# 2. 定期全量备份 + binlog 备份
+# 3. 定期验证备份可用性
+```
+
+### 15.3 容量问题
+
+**问题 6：磁盘空间不足**
+```sql
+-- 诊断
+SELECT 
+    table_schema,
+    SUM(data_length + index_length) / 1024 / 1024 / 1024 AS size_gb
+FROM information_schema.tables
+GROUP BY table_schema
+ORDER BY size_gb DESC;
+
+-- 解决方案
+-- 1. 清理历史数据（归档）
+-- 2. 优化大字段存储（分离到对象存储）
+-- 3. 删除冗余索引
+-- 4. 压缩表
+ALTER TABLE large_table ROW_FORMAT=COMPRESSED;
+```
+
+**问题 7：表数据量过大**
+```sql
+-- 解决方案：分区表
+CREATE TABLE orders (
+    id BIGINT PRIMARY KEY,
+    user_id BIGINT NOT NULL,
+    created_at TIMESTAMP NOT NULL,
+    INDEX idx_user_id (user_id)
+) PARTITION BY RANGE (YEAR(created_at)) (
+    PARTITION p2023 VALUES LESS THAN (2024),
+    PARTITION p2024 VALUES LESS THAN (2025),
+    PARTITION p2025 VALUES LESS THAN (2026),
+    PARTITION p_future VALUES LESS THAN MAXVALUE
+);
+
+-- 定期删除旧分区
+ALTER TABLE orders DROP PARTITION p2023;
+```
+
+### 15.4 连接问题
+
+**问题 8：连接数耗尽**
+```sql
+-- 查看当前连接
+SHOW PROCESSLIST;
+
+-- 解决方案
+-- 1. 增加最大连接数
+SET GLOBAL max_connections = 500;
+
+-- 2. 优化应用连接池配置
+spring.datasource.hikari.maximum-pool-size=20
+spring.datasource.hikari.minimum-idle=5
+spring.datasource.hikari.connection-timeout=30000
+
+-- 3. 及时关闭空闲连接
+SET GLOBAL wait_timeout = 600;
+SET GLOBAL interactive_timeout = 600;
+
+-- 4. 排查连接泄漏
+```
+
+## 16. 数据库设计反模式
+
+### 16.1 应避免的设计
+
+| 反模式 | 问题 | 正确做法 |
+|--------|------|----------|
+| **使用 NULL 表示多种含义** | 语义不清，查询复杂 | 使用明确的状态值或多个字段 |
+| **使用字符串存储 JSON** | 无法索引，查询困难 | 使用 JSON 类型或拆分为字段 |
+| **过度使用触发器** | 难以调试，性能影响 | 在应用层处理业务逻辑 |
+| **使用保留字作为字段名** | 需要转义，易出错 | 使用有意义的业务名称 |
+| **单表存储所有数据** | 查询慢，维护困难 | 按业务拆分表 |
+| **使用 TEXT 存储短字符串** | 浪费空间，性能差 | 使用 VARCHAR |
+| **不设置字符集** | 乱码问题 | 明确指定 utf8mb4 |
+
+### 16.2 示例对比
+
+```sql
+-- ❌ 反模式：使用 NULL 表示多种含义
+CREATE TABLE orders (
+    id BIGINT PRIMARY KEY,
+    cancelled_at TIMESTAMP NULL  -- NULL 表示未取消？还是数据缺失？
+);
+
+-- ✅ 正确做法：使用明确的状态字段
+CREATE TABLE orders (
+    id BIGINT PRIMARY KEY,
+    status VARCHAR(20) NOT NULL,  -- PENDING/PAID/CANCELLED
+    cancelled_at TIMESTAMP NULL,
+    INDEX idx_status (status)
+);
+
+-- ❌ 反模式：使用字符串存储 JSON
+CREATE TABLE products (
+    id BIGINT PRIMARY KEY,
+    attributes TEXT  -- '{"color":"red","size":"L"}'
+);
+
+-- ✅ 正确做法：使用 JSON 类型
+CREATE TABLE products (
+    id BIGINT PRIMARY KEY,
+    attributes JSON,
+    INDEX idx_color ((CAST(attributes->>'$.color' AS CHAR(50))))
+);
+
+-- ❌ 反模式：单表存储所有数据
+CREATE TABLE users (
+    id BIGINT PRIMARY KEY,
+    username VARCHAR(50),
+    email VARCHAR(100),
+    profile_text LONGTEXT,  -- 大字段
+    preferences_json TEXT,  -- 大字段
+    avatar_data BLOB        -- 大字段
+);
+
+-- ✅ 正确做法：拆分表
+CREATE TABLE users (
+    id BIGINT PRIMARY KEY,
+    username VARCHAR(50),
+    email VARCHAR(100)
+);
+
+CREATE TABLE user_profiles (
+    user_id BIGINT PRIMARY KEY,
+    profile_text TEXT
+);
+
+CREATE TABLE user_preferences (
+    user_id BIGINT PRIMARY KEY,
+    preferences JSON
+);
+```
+
+---
+
+## 相关规范
+
+- 通用编码规范：参照 `coding-standards.mdc`
+- 安全规范：参照 `security.mdc`
+- 测试规范：参照 `testing.mdc`
+- 可观测性：参照 `observability.mdc`
+
+---
+**重要**: 这些规范是数据库设计的基础，应该在所有项目中严格遵循。

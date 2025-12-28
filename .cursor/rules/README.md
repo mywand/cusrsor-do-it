@@ -40,6 +40,7 @@
 | 文件 | 作用 | 是否常驻 (alwaysApply) |
 | ---- | ---- | ---------------------- |
 | `coding-standards.mdc` | 跨语言通用编码规范 | ✅ |
+| `database.mdc` | 数据库设计规范（表设计/索引/事务/外键约束等） | ✅ |
 | `must.mdc` | 基本合规规则（最高优先级） | ✅ |
 | `observability.mdc` | 可观测性实施指南 | ❌ |
 | `quality.mdc` | 质量与自检清单 | ✅ |
@@ -86,7 +87,7 @@ tools/must (最高优先级)
 	│                               │
 	├─ tools/quality                │
 	│                               │
-	└─ tools/coding-standards (基础编码规范)
+	└─ tools/coding-standards + tools/database (基础编码规范)
 			│
 			├─ languages/: csharp / go / java / python
 			├─ frameworks/: vue / frontend / wechat-mini-program
