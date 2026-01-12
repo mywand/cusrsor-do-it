@@ -1370,10 +1370,10 @@ CREATE TABLE user_preferences (
 
 ## 相关规范
 
-- 通用编码规范：参照 `coding-standards.mdc`
-- 安全规范：参照 `security.mdc`
-- 测试规范：参照 `testing.mdc`
-- 可观测性：参照 `observability.mdc`
+- 通用编码规范：参照 `coding-standards.md`
+- 安全规范：参照 `security.md`
+- 测试规范：参照 `testing.md`
+- 可观测性：参照 `observability.md`
 
 ---
 **重要**: 这些规范是数据库设计的基础，应该在所有项目中严格遵循。

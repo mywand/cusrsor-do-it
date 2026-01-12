@@ -11,20 +11,20 @@
 ### 核心规范（所有项目必读）
 | 文档 | 说明 | 适用项目 | 优先级 |
 |------|------|----------|--------|
-| [adr-template.mdc](./adr-template.mdc) | 架构决策记录模板 | 所有项目 | P0 |
-| [document.mdc](./document.mdc) | 文档体系与模板规范 | 所有项目 | P0 |
+| [adr-template.md](./adr-template.md) | 架构决策记录模板 | 所有项目 | P0 |
+| [document.md](./document.md) | 文档体系与模板规范 | 所有项目 | P0 |
 | [lessons-learned-code-analysis.md](./lessons-learned-code-analysis.md) | 代码分析经验教训案例集 | 所有项目 | P1 |
 
 ### 架构设计规范
 | 文档 | 说明 | 适用项目 | 优先级 |
 |------|------|----------|--------|
-| [architecture-lightweight.mdc](./architecture-lightweight.mdc) | 轻量级架构文档模板 | 中小型项目（≤10人） | P1 |
-| [module-design-guidelines.mdc](./module-design-guidelines.mdc) | 完整模块设计规范 | 大型项目（>10人） | P2 |
+| [architecture-lightweight.md](./architecture-lightweight.md) | 轻量级架构文档模板 | 中小型项目（≤10人） | P1 |
+| [module-design-guidelines.md](./module-design-guidelines.md) | 完整模块设计规范 | 大型项目（>10人） | P2 |
 
 ### 需求与设计
 | 文档 | 说明 | 适用项目 | 优先级 |
 |------|------|----------|--------|
-| [feature-specification-guidelines.mdc](./feature-specification-guidelines.mdc) | 功能规格说明指南 | 中大型项目 | P1 |
+| [feature-specification-guidelines.md](./feature-specification-guidelines.md) | 功能规格说明指南 | 中大型项目 | P1 |
 
 ---
 
@@ -34,29 +34,29 @@
 
 #### 小型项目（1-5人，< 3个月）
 **必读**：
-- ✅ [document.mdc](./document.mdc) - 了解文档体系
-- ✅ [architecture-lightweight.mdc](./architecture-lightweight.mdc) - 30分钟快速版
+- ✅ [document.md](./document.md) - 了解文档体系
+- ✅ [architecture-lightweight.md](./architecture-lightweight.md) - 30分钟快速版
 
 **可选**：
-- 📖 [adr-template.mdc](./adr-template.mdc) - 重要技术决策时使用
+- 📖 [adr-template.md](./adr-template.md) - 重要技术决策时使用
 
 #### 中型项目（5-10人，3-6个月）
 **必读**：
-- ✅ [document.mdc](./document.mdc)
-- ✅ [architecture-lightweight.mdc](./architecture-lightweight.mdc) - 2小时标准版
-- ✅ [adr-template.mdc](./adr-template.mdc)
+- ✅ [document.md](./document.md)
+- ✅ [architecture-lightweight.md](./architecture-lightweight.md) - 2小时标准版
+- ✅ [adr-template.md](./adr-template.md)
 
 **推荐**：
-- 📖 [feature-specification-guidelines.mdc](./feature-specification-guidelines.mdc) - 复杂功能开发
+- 📖 [feature-specification-guidelines.md](./feature-specification-guidelines.md) - 复杂功能开发
 
 #### 大型项目（>10人，> 6个月）
 **必读**：
 - ✅ 所有文档
 
 **重点**：
-- 🔥 [module-design-guidelines.mdc](./module-design-guidelines.mdc)
-- 🔥 [feature-specification-guidelines.mdc](./feature-specification-guidelines.mdc)
-- 🔥 [adr-template.mdc](./adr-template.mdc)
+- 🔥 [module-design-guidelines.md](./module-design-guidelines.md)
+- 🔥 [feature-specification-guidelines.md](./feature-specification-guidelines.md)
+- 🔥 [adr-template.md](./adr-template.md)
 
 ---
 
@@ -65,9 +65,9 @@
 ### 架构设计
 ```mermaid
 flowchart TD
-    A{项目规模?} -->|小型<br/>1-5人| B[architecture-lightweight.mdc<br/>30分钟快速版]
-    A -->|中型<br/>5-10人| C[architecture-lightweight.mdc<br/>2小时标准版]
-    A -->|大型<br/>>10人| D[module-design-guidelines.mdc<br/>完整版]
+    A{项目规模?} -->|小型<br/>1-5人| B[architecture-lightweight.md<br/>30分钟快速版]
+    A -->|中型<br/>5-10人| C[architecture-lightweight.md<br/>2小时标准版]
+    A -->|大型<br/>>10人| D[module-design-guidelines.md<br/>完整版]
     
     B --> E[完成架构设计]
     C --> E
@@ -80,13 +80,13 @@ flowchart TD
 
 ### 需求文档
 - **简单功能**: 使用用户故事（User Story）即可
-- **中等复杂度**: [feature-specification-guidelines.mdc](./feature-specification-guidelines.mdc) 简化版
-- **高复杂度**: [feature-specification-guidelines.mdc](./feature-specification-guidelines.mdc) 完整版
+- **中等复杂度**: [feature-specification-guidelines.md](./feature-specification-guidelines.md) 简化版
+- **高复杂度**: [feature-specification-guidelines.md](./feature-specification-guidelines.md) 完整版
 
 ### 决策记录
-- **技术选型**: [adr-template.mdc](./adr-template.mdc)
-- **架构变更**: [adr-template.mdc](./adr-template.mdc)
-- **重要决策**: [adr-template.mdc](./adr-template.mdc)
+- **技术选型**: [adr-template.md](./adr-template.md)
+- **架构变更**: [adr-template.md](./adr-template.md)
+- **重要决策**: [adr-template.md](./adr-template.md)
 
 ---
 
@@ -94,10 +94,10 @@ flowchart TD
 
 ```mermaid
 graph TB
-    A[产品需求 PRD] --> B[feature-specification-guidelines.mdc<br/>功能规格说明]
-    B --> C[architecture-lightweight.mdc<br/>架构设计]
-    B --> D[module-design-guidelines.mdc<br/>模块设计]
-    C --> E[adr-template.mdc<br/>技术决策]
+    A[产品需求 PRD] --> B[feature-specification-guidelines.md<br/>功能规格说明]
+    B --> C[architecture-lightweight.md<br/>架构设计]
+    B --> D[module-design-guidelines.md<br/>模块设计]
+    C --> E[adr-template.md<br/>技术决策]
     D --> E
     C --> F[API文档]
     D --> F
@@ -106,7 +106,7 @@ graph TB
     H --> I[验收测试]
     G --> I
     
-    J[document.mdc<br/>文档规范] -.指导.-> B
+    J[document.md<br/>文档规范] -.指导.-> B
     J -.指导.-> C
     J -.指导.-> D
     J -.指导.-> F
@@ -123,31 +123,31 @@ graph TB
 
 ## ✨ 文档特色
 
-### adr-template.mdc
+### adr-template.md
 - ✅ 完整的ADR模板（基础版 + 简化版）
 - ✅ 实际案例示例
 - ✅ 团队协作流程
 - ✅ 质量检查清单
 
-### architecture-lightweight.mdc
+### architecture-lightweight.md
 - ✅ 3种填写模式（30分钟/2小时/1天）
 - ✅ 10章节完整模板
 - ✅ 丰富的Mermaid图表示例
 - ✅ 实用的检查清单
 
-### document.mdc
+### document.md
 - ✅ 覆盖所有文档类型（README/API/CHANGELOG等）
 - ✅ 可直接复制的完整模板
 - ✅ 多语言代码示例
 - ✅ 文档质量保证体系
 
-### feature-specification-guidelines.mdc
+### feature-specification-guidelines.md
 - ✅ 从需求到验收的完整流程
 - ✅ 用户注册功能完整示例
 - ✅ 接口设计详细规范
 - ✅ 监控运维指南
 
-### module-design-guidelines.mdc
+### module-design-guidelines.md
 - ✅ 大型项目模块设计规范
 - ✅ 七要素设计方法
 - ✅ 流程与状态机设计
@@ -158,11 +158,11 @@ graph TB
 ## 📝 使用建议
 
 ### 文档编写顺序
-1. **项目启动**: 先读 [document.mdc](./document.mdc)，了解文档体系
-2. **架构设计**: 使用 [architecture-lightweight.mdc](./architecture-lightweight.mdc)
-3. **技术决策**: 使用 [adr-template.mdc](./adr-template.mdc) 记录重要决策
-4. **功能开发**: 使用 [feature-specification-guidelines.mdc](./feature-specification-guidelines.mdc)
-5. **大型模块**: 使用 [module-design-guidelines.mdc](./module-design-guidelines.mdc)
+1. **项目启动**: 先读 [document.md](./document.md)，了解文档体系
+2. **架构设计**: 使用 [architecture-lightweight.md](./architecture-lightweight.md)
+3. **技术决策**: 使用 [adr-template.md](./adr-template.md) 记录重要决策
+4. **功能开发**: 使用 [feature-specification-guidelines.md](./feature-specification-guidelines.md)
+5. **大型模块**: 使用 [module-design-guidelines.md](./module-design-guidelines.md)
 
 ### 文档维护
 - **定期更新**: 每季度回顾一次
@@ -175,17 +175,17 @@ graph TB
 ## 🎓 学习路径
 
 ### 新手路径（第1周）
-1. 📖 [document.mdc](./document.mdc) - 30分钟了解文档体系
-2. 📖 [architecture-lightweight.mdc](./architecture-lightweight.mdc) - 30分钟快速版
+1. 📖 [document.md](./document.md) - 30分钟了解文档体系
+2. 📖 [architecture-lightweight.md](./architecture-lightweight.md) - 30分钟快速版
 3. ✍️ 实践：为小项目编写架构文档
 
 ### 进阶路径（第1个月）
-1. 📖 [adr-template.mdc](./adr-template.mdc) - 了解决策记录
-2. 📖 [feature-specification-guidelines.mdc](./feature-specification-guidelines.mdc) - 学习功能设计
+1. 📖 [adr-template.md](./adr-template.md) - 了解决策记录
+2. 📖 [feature-specification-guidelines.md](./feature-specification-guidelines.md) - 学习功能设计
 3. ✍️ 实践：为中型项目编写完整文档
 
 ### 高级路径（持续）
-1. 📖 [module-design-guidelines.mdc](./module-design-guidelines.mdc) - 大型项目设计
+1. 📖 [module-design-guidelines.md](./module-design-guidelines.md) - 大型项目设计
 2. 📖 参与团队文档评审
 3. ✍️ 优化和完善文档规范
 
@@ -231,11 +231,11 @@ graph TB
 
 | 文档 | 大小 | 最后更新 | 状态 |
 |------|------|----------|------|
-| adr-template.mdc | ~400行 | 2025-10-11 | ✅ 完成 |
-| architecture-lightweight.mdc | ~850行 | 2025-10-11 | ✅ 完成 |
-| document.mdc | ~900行 | 2025-10-11 | ✅ 完成 |
-| feature-specification-guidelines.mdc | ~3800行 | 2025-10-11 | ✅ 完成 |
-| module-design-guidelines.mdc | ~528行 | 2025-09-18 | ✅ 良好 |
+| adr-template.md | ~400行 | 2025-10-11 | ✅ 完成 |
+| architecture-lightweight.md | ~850行 | 2025-10-11 | ✅ 完成 |
+| document.md | ~900行 | 2025-10-11 | ✅ 完成 |
+| feature-specification-guidelines.md | ~3800行 | 2025-10-11 | ✅ 完成 |
+| module-design-guidelines.md | ~528行 | 2025-09-18 | ✅ 良好 |
 | lessons-learned-code-analysis.md | ~350行 | 2026-01-06 | ✅ 完成 |
 
 **总计**: 约6800+行文档内容（不含已移至tools目录的代码分析规范）
@@ -246,14 +246,14 @@ graph TB
 
 ### 2026-01-06
 - ✅ 新增 lessons-learned-code-analysis.md（代码分析经验教训案例集）
-- ✅ 更新 code-analysis.mdc 第6节（问题分析与修复验证）
-- ✅ 更新 must.mdc 第6节（问题分析与修复原则）
+- ✅ 更新 code-analysis.md 第6节（问题分析与修复验证）
+- ✅ 更新 must.md 第6节（问题分析与修复原则）
 
 ### 2025-10-11
-- ✅ 完全重写 adr-template.mdc
-- ✅ 完全重写 architecture-lightweight.mdc
-- ✅ 完全重写 document.mdc
-- ✅ 完全重写 feature-specification-guidelines.mdc
+- ✅ 完全重写 adr-template.md
+- ✅ 完全重写 architecture-lightweight.md
+- ✅ 完全重写 document.md
+- ✅ 完全重写 feature-specification-guidelines.md
 - ✅ 新增 README.md 索引文档
 
 ### 历史版本

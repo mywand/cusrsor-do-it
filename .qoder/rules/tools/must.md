@@ -156,7 +156,7 @@ TL;DR | 需求覆盖 | 方案摘要 | 关键变更 | 已完成 | 待确认 | 风
 - ✅ 理解业务上下文比修改代码更重要
 - ✅ 鼓励质疑和反向验证
 
-**详细规范参见**：`code-analysis.mdc` 第6节
+**详细规范参见**：`code-analysis.md` 第6节
 
 ## 7. 禁止事项
 
@@ -172,11 +172,11 @@ TL;DR | 需求覆盖 | 方案摘要 | 关键变更 | 已完成 | 待确认 | 风
 
 ## 8. 规范引用
 
-- 统一编码规范：参照 `coding-standards.mdc`
-- 代码分析规范：参照 `code-analysis.mdc`
-- 测试相关：参照 `testing.mdc`
-- 安全相关：参照 `security.mdc`
-- 可观测性：参照 `observability.mdc`
+- 统一编码规范：参照 `coding-standards.md`
+- 代码分析规范：参照 `code-analysis.md`
+- 测试相关：参照 `testing.md`
+- 安全相关：参照 `security.md`
+- 可观测性：参照 `observability.md`
 
 ---
 **重要**: 这些规则是底线要求，任何项目都不得违反。
